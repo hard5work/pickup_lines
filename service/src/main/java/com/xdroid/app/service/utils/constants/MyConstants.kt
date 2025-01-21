@@ -25,3 +25,4 @@ object NetworkError {
 
 const val username = "Username"
 const val password = "Password"
+const val installApp = "\n Install App From: https://play.google.com/store/apps/details?id=com.joyful.app.pickuplines"

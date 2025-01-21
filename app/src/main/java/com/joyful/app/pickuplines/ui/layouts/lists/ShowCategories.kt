@@ -28,6 +28,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -51,7 +52,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
+import com.joyful.app.pickuplines.R
 import com.joyful.app.pickuplines.TextDownloadableFontsSnippet1.provider
+import com.joyful.app.pickuplines.data.models.AdModel
 import com.joyful.app.pickuplines.data.models.CategoryList
 import com.joyful.app.pickuplines.data.models.CategoryListModel
 import com.joyful.app.pickuplines.ui.dialogs.InfoAlertDialog
@@ -89,21 +97,24 @@ import java.util.Random
 fun ShowCategories(
     navController: NavController
 ) {
-    val myViewModel:SingleVm = koinViewModel()
+    val myViewModel: SingleVm = koinViewModel()
 
     val states by myViewModel.getCat.collectAsState()
     val isDataLoaded = rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!isDataLoaded.value) {
+            DebugMode.e("askdjhaksjdhjasdahsd ${isDataLoaded.value}")
 
-    if (!isDataLoaded.value) {
-        DebugMode.e("askdjhaksjdhjasdahsd ${isDataLoaded.value}")
-        LaunchedEffect(Unit) {
             myViewModel.getCategories() // Set as loaded to prevent future calls
+
+            myViewModel.getADList()
         }
     }
     val itemModel = rememberSaveable { mutableStateOf(CategoryListModel()) }
     var showView by rememberSaveable { mutableStateOf(false) }
     var showAlert by rememberSaveable { mutableStateOf(false) }
     var alertMessage by rememberSaveable { mutableStateOf("") }
+    val adBanner by myViewModel.adBanner.collectAsState(null)
     var categoryItems by rememberSaveable { mutableStateOf(listOf<CategoryList>()) }
 
 
@@ -147,40 +158,40 @@ fun ShowCategories(
         }
     }
 
-        Column(modifier = Modifier
-            .fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
 //                    .padding(horizontal = 16.dp)
 //                    .padding(bottom = 5.dp)
-            ) {
+        ) {
 
 
-                if(showView){
-                    NavList(
-                        items = categoryItems,
-                        navController = navController
-                    )
-                }
-                else{
-                    LoadingContentColumn()
-                }
-
-                if(showAlert){
-                    InfoAlertDialog(message = alertMessage) {
-                        showAlert = false
-
-                    }
-                }
-
-
-
+            if (showView) {
+                NavList(
+                    items = categoryItems,
+                    navController = navController,
+                    adBanner = adBanner
+                )
+            } else {
+                LoadingContentColumn()
             }
+
+            if (showAlert) {
+                InfoAlertDialog(message = alertMessage) {
+                    showAlert = false
+
+                }
+            }
+
 
         }
 
+    }
 
 
 }
@@ -189,13 +200,56 @@ fun ShowCategories(
 @Composable
 fun NavList(
     items: List<CategoryList>?,
-    navController: NavController
+    navController: NavController,
+    adBanner: AdModel? = null
 ) {
     val count = 2
     DebugMode.e("length ${items?.size}")
     val newitems = rememberSaveable(items) {
         itemsWithAds(items)
     }
+    val context = LocalContext.current
+    val adUnitIds = rememberSaveable { context.getString(R.string.centerBanner) }
+
+    // Keep track of the loading state
+    var isLoading by rememberSaveable { mutableStateOf(true) }
+    var isAdError by rememberSaveable { mutableStateOf(false) }
+
+    // Use a static AdView instance to avoid recreation
+    val adView = remember {
+        AdView(context).apply {
+            setAdSize(AdSize.LARGE_BANNER)
+            adUnitId = adUnitIds
+        }
+    }
+
+    // Set the AdListener only once
+    DisposableEffect(adView) {
+        val adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                DebugMode.e("Banner ad load success")
+                isLoading = false
+                isAdError = false
+            }
+
+            override fun onAdFailedToLoad(error: LoadAdError) {
+                DebugMode.e("Banner ad load Failed-> ${error.message}")
+                isLoading = false
+                isAdError = true
+            }
+        }
+        adView.adListener = adListener
+
+        onDispose {
+            adView.adListener = object : AdListener() {}
+        }
+    }
+
+    // Load the ad only once
+    LaunchedEffect(adView) {
+        adView.loadAd(AdRequest.Builder().build())
+    }
+
     LazyColumn {
 
         items(newitems.size, key = { index ->
@@ -211,7 +265,7 @@ fun NavList(
                 val ite = newitems[index] as CategoryList
                 NavigationItem(ite, navController)
             } else {
-               AdComposable()
+                AdComposable(adView, isLoading, isAdError, adBanner)
             }
 
         }
@@ -253,7 +307,13 @@ fun NavigationItem(
 
 
             },
-        colors = CardDefaults.cardColors(containerColor = Color(android.graphics.Color.parseColor(item.color))),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(
+                android.graphics.Color.parseColor(
+                    item.color
+                )
+            )
+        ),
         elevation = CardDefaults.cardElevation(5.dp)
 //         Color(android.graphics.Color.parseColor(item.color))
     ) {
@@ -266,13 +326,20 @@ fun NavigationItem(
         ) {
 
             Spacer(modifier = Modifier.height(10.dp))
-            Row(modifier = Modifier.fillMaxWidth(),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top){
-                Text(text = item.name!!, color = Color(android.graphics.Color.parseColor(item.textColor)), style = TextStyle(fontWeight = FontWeight.Bold, fontSize = 20.sp, fontFamily = FontFamily(
-                    Font(googleFont = GoogleFont("Open Sans"), fontProvider = provider)
+                verticalAlignment = Alignment.Top
+            ) {
+                Text(
+                    text = item.name!!,
+                    color = Color(android.graphics.Color.parseColor(item.textColor)),
+                    style = TextStyle(
+                        fontWeight = FontWeight.Bold, fontSize = 20.sp, fontFamily = FontFamily(
+                            Font(googleFont = GoogleFont("Open Sans"), fontProvider = provider)
+                        )
+                    )
                 )
-                ))
                 LottieAnimationFromUrl(url = item.assets!!)
             }
 
@@ -284,10 +351,7 @@ fun NavigationItem(
     }
 
 
-
-
 }
-
 
 
 @Composable
@@ -298,6 +362,6 @@ fun Toolbar(text: String = "") {
             .padding(horizontal = 16.dp, vertical = 15.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = text, color = Color.Black,)
+        Text(text = text, color = Color.Black)
     }
 }

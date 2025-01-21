@@ -95,9 +95,9 @@ fun SaveImageFromLocalExample() {
 
 
                     // Save the image using MediaStore API
-                    saveImageToMediaStore(context, it)
+//                    saveImageToMediaStore(context, it)
                 } else {
-                    saveImageToExternalStorage(context,it)
+//                    saveImageToExternalStorage(context,it)
                 } }
                 showToast = true
             } else {
@@ -202,6 +202,6 @@ fun CanvasSaveExample() {
 // Function to save the canvas to file
 fun saveCanvasToFile(context: android.content.Context, bitmap: ImageBitmap) {
     val bmp = bitmap.asAndroidBitmap()
-    saveImageToExternalStorage(context, bmp)
+//    saveImageToExternalStorage(context, bmp)
 
 }

@@ -129,12 +129,14 @@ import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
 import org.koin.compose.koinInject
+import org.koin.core.component.getScopeName
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.Objects
 import kotlin.text.Typography.quote
 
+@RequiresApi(Build.VERSION_CODES.M)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navController: NavController) {
@@ -338,23 +340,23 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
     }
 
     val networkHelper: NetworkHelper = koinInject()
-
-    var buttonClicked by rememberSaveable { mutableStateOf(false) }
-    if (networkHelper.isNetworkConnected()) {
-        if (mInterstitialAd == null)
-            loadInterstitial(LocalContext.current)
-    }
-
-    if (buttonClicked) {
-        if (networkHelper.isNetworkConnected()) {
-            showInterstitial(LocalContext.current) {
-                buttonClicked = false
-                navController.navigateUp()
-            }
-        } else {
-            navController.navigateUp()
-        }
-    }
+//
+//    var buttonClicked by rememberSaveable { mutableStateOf(false) }
+//    if (networkHelper.isNetworkConnected()) {
+//        if (mInterstitialAd == null)
+//            loadInterstitial(LocalContext.current)
+//    }
+//
+//    if (buttonClicked) {
+//        if (networkHelper.isNetworkConnected()) {
+//            showInterstitial(LocalContext.current) {
+//                buttonClicked = false
+//                navController.navigateUp()
+//            }
+//        } else {
+//            navController.navigateUp()
+//        }
+//    }
 
 
         Column(
@@ -384,18 +386,11 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
                         alpha = alpha,
                         onSuccess = { result ->
                             // Capture the bitmap from the loaded image
-
-                            Log.e("Success", "sdjkasd ajd asdjadka Success ${result.result}")
-                            Log.e("Success", "sdjkasd ajd asdjadka Success ${result.result.image}")
-                            Log.e("Success", "sdjkasd ajd asdjadka Success ${result}")
                             bitmap = (result.result.image as BitmapImage).bitmap
 
                         },
                         onError = {
-                            Log.e(
-                                "asda",
-                                "sdjkasd ajd asdjadka sdeerrorrrororororororo ${it.result}"
-                            )
+
                             // Handle error if needed
 //                Toast.makeText(LocalContext.current, "Error loading image", Toast.LENGTH_SHORT).show()
                         }
@@ -809,7 +804,21 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
                     imageOpacity = alpha,
                     textColor = textColor,
                     textAlign = currentAlignment,
-                    fontFamily = fontFamily
+                    fontFamily = fontFamily,
+                    shadowColor = shadowColor,
+                    offsetX =shadowOffsetX,
+                    offsetY = shadowOffsetY,
+                    shadowBlur = shadowBlurRadius,
+                   topPadding =  topPadding,
+                    bottomPadding = bottomPadding,
+                    leftPadding = leftPadding,
+                    rightPadding = rightPadding,
+                    fontSize = fontSize,
+                    onAction = {
+                        com->
+                        saveImage = false
+
+                    }
                 )
 //            }
             }
@@ -888,7 +897,7 @@ fun FontSizeDialog(
 }
 
 
-fun saveImageWithText(bitmap: Bitmap, text: String, context: Context) {
+fun saveImageWithText(bitmap: Bitmap, text: String, context: Context, onAction: (Boolean) -> Unit) {
     // Create a new bitmap with the same dimensions
     val resultBitmap = Bitmap.createBitmap(bitmap.width, bitmap.height, bitmap.config)
     val canvas = Canvas(resultBitmap)
@@ -910,9 +919,9 @@ fun saveImageWithText(bitmap: Bitmap, text: String, context: Context) {
 
 
         // Save the image using MediaStore API
-        saveImageToMediaStore(context, bitmap)
+        saveImageToMediaStore(context, bitmap, onAction)
     } else {
-        saveImageToExternalStorage(context, bitmap)
+        saveImageToExternalStorage(context, bitmap,onAction)
     }
 }
 
@@ -1205,7 +1214,7 @@ fun SaveBitmapToStorage(myBitmap: Bitmap?, onAction: (String) -> Unit) {
 
 // Create a content resolver reference
 //    val contentResolver = context.contentResolver
-    saveImageToDevice(context, bitmap)
+//    saveImageToDevice(context, bitmap)
     onAction("Completed")
 //
 //// For Android 10 (API 29) and above, save the image using MediaStore
@@ -1361,13 +1370,24 @@ val currentTimeMillis = System.currentTimeMillis()
 
 
 
+
 fun saveQuoteToDevice(
     context: Context, quote: String, backgroudColor: Color, imageUri: Uri?,
     blurRadius: Float = 15f,
     imageOpacity: Float = 1f,
     textColor: Color,
     textAlign: TextAlign,
-    fontFamily: FontFamily
+    fontFamily: FontFamily,
+    shadowColor:Color,
+    offsetX:Float,
+    offsetY:Float,
+    shadowBlur:Float,
+    topPadding:Float,
+    bottomPadding:Float,
+    leftPadding:Float,
+    rightPadding:Float,
+    fontSize:Float,
+    onAction: (Boolean) -> Unit
 ) {
     // Check if the device is running API 29 (Android 10) or higher, and if so, use MediaStore for saving images.
     // Create Bitmap and Canvas
@@ -1393,9 +1413,12 @@ fun saveQuoteToDevice(
     // Setup TextPaint for better text handling
     val textPaint = TextPaint().apply {
         color = textColor.toArgb()
-        textSize = 70f
+        textSize = fontSize
         isAntiAlias = true
-        typeface = Typeface.DEFAULT
+        typeface = Typeface.MONOSPACE
+//        typeface = Typeface.create(fontFamily.getScopeName().toString(),Typeface.NORMAL)
+        setShadowLayer(shadowBlur,offsetX, offsetY,shadowColor.toArgb())
+
     }
 
     val copyRight = TextPaint().apply {
@@ -1403,14 +1426,17 @@ fun saveQuoteToDevice(
         textSize = 30f
         isAntiAlias = true
     }
-    val padding = 10f
+
+    // Adjust width and height to account for horizontal and vertical padding
+    val contentWidth = width - (leftPadding + rightPadding)
+    val contentHeight = width - (topPadding + bottomPadding)
     // Create a StaticLayout to handle multiline text
     val staticLayout = StaticLayout.Builder.obtain(
         quote,
         0,
         quote.length,
         textPaint,
-        width - 80
+        contentWidth.toInt()
     ) // Subtract 40 for padding
         .setAlignment(Layout.Alignment.ALIGN_CENTER)
         .setLineSpacing(1f, 1f)
@@ -1445,14 +1471,14 @@ fun saveQuoteToDevice(
     // Draw the multiline quote centered on the canvas
     val yPosition = (bitmap.height / 2) - (staticLayout.height / 2) // Vertically center the text
     canvas.save()
-    canvas.translate(padding, yPosition.toFloat()) // Apply horizontal margin and center vertically
+    canvas.translate(leftPadding,yPosition.toFloat()) // Apply horizontal margin and center vertically
     staticLayout.draw(canvas)
     canvas.restore()
 
     val align = when(textAlign){
         TextAlign.Center -> Layout.Alignment.ALIGN_CENTER
-        TextAlign.Right -> Layout.Alignment.ALIGN_CENTER
-        TextAlign.Left -> Layout.Alignment.ALIGN_CENTER
+        TextAlign.Right -> Layout.Alignment.ALIGN_OPPOSITE
+        TextAlign.Left -> Layout.Alignment.ALIGN_NORMAL
         else -> Layout.Alignment.ALIGN_CENTER
     }
     // Create a StaticLayout for the additional text
@@ -1464,15 +1490,15 @@ fun saveQuoteToDevice(
 // Calculate vertical position for the additional text
     val additionalTextYPosition = (bitmap.height - 80) // 20 pixels below the quote
     canvas.save()
-    canvas.translate(padding, additionalTextYPosition.toFloat()) // Apply horizontal margin
+    canvas.translate(leftPadding, additionalTextYPosition.toFloat()) // Apply horizontal margin
     staticLayoutAdditional.draw(canvas)
     canvas.restore()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         // Save the image using MediaStore API
-        saveImageToMediaStore(context, bitmap)
+        saveImageToMediaStore(context, bitmap, onAction)
     } else {
-        saveImageToExternalStorage(context, bitmap)
+        saveImageToExternalStorage(context, bitmap, onAction)
     }
 
 

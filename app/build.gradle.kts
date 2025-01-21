@@ -1,18 +1,31 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+    alias(libs.plugins.google.services)
 }
 
 android {
     namespace = "com.joyful.app.pickuplines"
     compileSdk = 34
 
+    signingConfigs {
+
+        // Release signing config (for production)
+        create("release") {
+            keyAlias = "xdroid051"
+            keyPassword ="xdroid051"
+            storeFile = file("/Users/anishmaharjan/Developments/Android/keys/allapps.jks")
+            storePassword = "xdroid051"
+        }
+    }
+
+
     defaultConfig {
         applicationId = "com.joyful.app.pickuplines"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 6
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -29,7 +42,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
+
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -99,6 +114,16 @@ dependencies {
     implementation(project(":service"))
     //Google Ad
     implementation(libs.play.services.ads)
+
+    // Import the Firebase BoM
+    implementation(platform(libs.firebase.bom))
+
+
+    // TODO: Add the dependencies for Firebase products you want to use
+    // When using the BoM, don't specify versions in Firebase dependencies
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.messaging)
+
 
 
     //Google Add

@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.joyful.app.pickuplines" />
+                  <option name="mobileSdkAppId" value="1:158968454946:android:c0325a6f8668c4c323cf7b" />
+                  <option name="projectId" value="pickup-lines-60e33" />
+                  <option name="projectNumber" value="158968454946" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />

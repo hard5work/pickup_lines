@@ -6,15 +6,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.gson.JsonArray
 import com.google.gson.JsonObject
+import com.joyful.app.pickuplines.data.models.AdModel
+import com.joyful.app.pickuplines.data.urls.adUrl
 import com.xdroid.app.service.data.model.DefaultRequestModel
 import com.xdroid.app.service.data.model.ErrorModel
 import com.xdroid.app.service.data.repository.MainRepository
 import com.xdroid.app.service.utils.constants.NetworkError
 import com.xdroid.app.service.utils.enums.Resource
 import com.xdroid.app.service.utils.helper.DebugMode
+import com.xdroid.app.service.utils.helper.DynamicResponse
 import com.xdroid.app.service.utils.helper.NetworkHelper
 import io.reactivex.rxjava3.disposables.CompositeDisposable
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 
@@ -54,6 +58,34 @@ abstract class BaseVM(
     fun clearError() {
         _errorMessage.value = null
     }
+
+
+
+    private var adBannerRequest = MutableStateFlow<Resource<JsonObject>>(Resource.idle())
+
+    val adBannerResponse: StateFlow<Resource<JsonObject>>
+        get() = adBannerRequest
+
+
+    private var _adBanner = MutableStateFlow<AdModel?>(null)
+    val adBanner: StateFlow<AdModel?>
+        get() = getAdModel()
+
+
+
+    fun getADList(
+    ) {
+        val requestModel = DefaultRequestModel()
+        requestModel.url = adUrl
+        requestModel.setToken = false
+        requestGetMethodDispose(requestModel, adBannerRequest)
+    }
+
+    private fun getAdModel(): MutableStateFlow<AdModel?> {
+        _adBanner.value = DynamicResponse.myObject<AdModel>(adBannerResponse.value.data)
+        return _adBanner
+    }
+
 
     override fun onCleared() {
         super.onCleared()

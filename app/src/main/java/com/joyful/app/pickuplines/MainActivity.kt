@@ -1,11 +1,14 @@
 package com.joyful.app.pickuplines
 
+import android.Manifest
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import android.os.CountDownTimer
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +20,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,35 +93,59 @@ class MainActivity : ComponentActivity() {
         preferenceHelper.setValue(PrefConstant.COUNTER, 0)
         // Start the 15-minute countdown timer
         loadInterstitial(this)
-        timer = object : CountDownTimer(15 * 60 * 1000, 1000) { // 15 minutes
-            override fun onTick(millisUntilFinished: Long) {
-                val minutes = (millisUntilFinished / 1000) / 60
-                val seconds = (millisUntilFinished / 1000) % 60
-                val time = String.format(Locale.ENGLISH, "%02d:%02d", minutes, seconds)
-                DebugMode.e("Time Left $time")
-            }
+//        timer = object : CountDownTimer(15 * 60 * 1000, 1000) { // 15 minutes
+//            override fun onTick(millisUntilFinished: Long) {
+//                val minutes = (millisUntilFinished / 1000) / 60
+//                val seconds = (millisUntilFinished / 1000) % 60
+//                val time = String.format(Locale.ENGLISH, "%02d:%02d", minutes, seconds)
+//                DebugMode.e("Time Left $time")
+//            }
+//
+//            override fun onFinish() {
+//                showInterstitial(this@MainActivity) {
+//                    timer.start()
+//                }
+//            }
+//        }
+//        timer.start()
 
-            override fun onFinish() {
-                showInterstitial(this@MainActivity) {
-                    timer.start()
-                }
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requestPermissionsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        timer.start()
+
+        // Check if intent has notification data
+        var notificationTitle:String? = /*intent.getStringExtra("notification_title")*/ null
+        var notificationMessage :String? = /*intent.getStringExtra("notification_message")*/ null
+
+        val extras = intent.extras
+        if (extras != null) {
+            DebugMode.e("My DATA ${extras.keySet().size}")
+            for ( data in extras.keySet()){
+                DebugMode.e("My DATA keysets $data")
+            }
+            notificationTitle = extras.getString("notification_title")
+            notificationMessage = extras.getString("notification_message")
+
+        }
+
+        DebugMode.e("My DATA ${intent.extras.toString()}")
+        DebugMode.e("My DATA $notificationTitle $notificationMessage")
+
+
         setContent {
             val con = LocalContext.current
             val navController = rememberNavController()
             var buttonClicked by rememberSaveable { mutableStateOf(false) }
-            if (networkHelper.isNetworkConnected()) {
-                if (mInterstitialAd == null)
-                    loadInterstitial(LocalContext.current)
-            }
+
 
             val mainViewModel: MainViewModel = viewModel()
             val title by mainViewModel.title.observeAsState("Pickup Lines") // Observe the title state
             if (buttonClicked) {
                 LaunchedEffect(Unit) {
+                    DebugMode.e("Always Running 1")
                     if (networkHelper.isNetworkConnected()) {
+
+                        DebugMode.e("Always Running 2")
                         showInterstitial(con) {
                             buttonClicked = false
                             navController.navigateUp()
@@ -158,6 +188,10 @@ class MainActivity : ComponentActivity() {
                             )
                         }) { padding ->
                         Column(modifier = Modifier.padding(padding)) {
+                            MyApp(
+                                notificationTitle = notificationTitle,
+                                notificationMessage = notificationMessage
+                            )
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -192,6 +226,12 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+    private val requestPermissionsLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
+            if (!isGranted) {
+                // Handle case where permission is denied
+            }
+        }
 }
 
 
@@ -221,6 +261,8 @@ fun MyApp(navController: NavHostController, mainViewModel: MainViewModel) {
         }
 
     }
+
+
 }
 
 @Preview(showBackground = true)
@@ -248,5 +290,35 @@ fun Context.createImageFile(): File {
         imageFileName, /* prefix */
         ".jpg", /* suffix */
         externalCacheDir /* directory */
+    )
+}
+
+@Composable
+fun MyApp(notificationTitle: String?, notificationMessage: String?) {
+    // State to control the visibility of the dialog
+    var showDialog by remember { mutableStateOf(notificationTitle != null && notificationMessage != null) }
+
+    if (showDialog) {
+        NotificationDialog(
+            title = notificationTitle ?: "Notification",
+            message = notificationMessage ?: "You have a new message.",
+            onDismiss = { showDialog = false }
+        )
+    }
+
+    // Rest of your app's content goes here
+}
+
+@Composable
+fun NotificationDialog(title: String, message: String, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = { onDismiss() },
+        title = { Text(text = title) },
+        text = { Text(text = message) },
+        confirmButton = {
+            Button(onClick = onDismiss) {
+                Text("OK")
+            }
+        }
     )
 }

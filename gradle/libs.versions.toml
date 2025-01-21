@@ -12,6 +12,7 @@ composeColorPicker = "0.7.0"
 converterMoshi = "2.6.2"
 coreKtxVersion = "1.7.0"
 espressoCoreVersion = "3.5.1"
+firebaseBom = "33.5.1"
 foundation = "1.7.5"
 koinAndroidxCompose = "3.4.3"
 kotlin = "1.9.0"
@@ -38,7 +39,8 @@ runtime = "1.7.5"
 uiTextGoogleFonts = "1.7.5"
 navigationRuntimeKtx = "2.8.3"
 runtimeLivedata = "1.7.5"
-
+gs = "4.4.2"
+msging = "24.0.3"
 [libraries]
 adapter-rxjava3 = { module = "com.squareup.retrofit2:adapter-rxjava3", version.ref = "adapterRxjava3" }
 androidx-animation = { module = "androidx.compose.animation:animation", version.ref = "animation" }
@@ -66,6 +68,9 @@ compose = { module = "com.github.bumptech.glide:compose", version.ref = "compose
 compose-color-picker = { module = "com.godaddy.android.colorpicker:compose-color-picker", version.ref = "composeColorPicker" }
 converter-moshi = { module = "com.squareup.retrofit2:converter-moshi", version.ref = "converterMoshi" }
 converter-gson = { module = "com.squareup.retrofit2:converter-gson", version.ref = "adapterRxjava3" }
+firebase-analytics = { module = "com.google.firebase:firebase-analytics" }
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging", version.ref = "msging" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 #noinspection SimilarGradleDependency
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
@@ -100,4 +105,5 @@ androidx-runtime-livedata = { group = "androidx.compose.runtime", name = "runtim
 android-application = { id = "com.android.application", version.ref = "agp" }
 jetbrains-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 android-library = { id ="com.android.library", version.ref = "agp"}
+google-services = {id = "com.google.gms.google-services", version.ref = "gs"}
 

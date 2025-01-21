@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
@@ -32,9 +33,12 @@ import androidx.compose.ui.text.googlefonts.Font
 import androidx.compose.ui.text.googlefonts.GoogleFont
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.provider.FontsContractCompat
 import com.joyful.app.pickuplines.R
 import com.joyful.app.pickuplines.TextDownloadableFontsSnippet1.provider
+import com.xdroid.app.service.utils.helper.DebugMode
+import org.koin.core.component.getScopeName
 
 
 @Composable
@@ -86,6 +90,8 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
 
     // Initial selected font family
     val selectedFontFamily by remember { mutableStateOf(fontFamilies.first()) }
+    // Obtain Typeface from the selected FontFamily
+
 
     Column(
         modifier = Modifier
@@ -111,6 +117,8 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
                         .padding(horizontal = 8.dp)
                         .clickable {
                             onFontSelected(fontFamily)
+
+
                         } // Update selected font on click
                 )
             }
@@ -124,3 +132,22 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
         Spacer(modifier = Modifier.height(20.dp))
     }
 }
+
+// Method to load Typeface from Compose FontFamily
+//fun loadTypeface(context: Context, font: GoogleFont): android.graphics.Typeface? {
+//
+//
+//    val fontRequest = GoogleFont.FontRequest(
+//        provider = provider,
+//        fontName = font.name
+//    )
+//
+//    return try {
+//        val family = ResourcesCompat.getFont(context, fontRequest)
+//        family
+//    } catch (e: Exception) {
+//        e.printStackTrace()
+//        null
+//    }
+//}
+

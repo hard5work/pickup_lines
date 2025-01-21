@@ -10,6 +10,7 @@ import com.google.android.gms.ads.FullScreenContentCallback
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.MobileAds
 import com.google.android.gms.ads.appopen.AppOpenAd
+import com.google.firebase.FirebaseApp
 import com.joyful.app.pickuplines.di.module.appModule
 import com.joyful.app.pickuplines.di.module.repoModule
 import com.joyful.app.pickuplines.di.module.viewModelModule
@@ -43,6 +44,8 @@ class App : Application(), Application.ActivityLifecycleCallbacks {
         loadInterstitial(this)
         loadAppOpenAd()
         registerActivityLifecycleCallbacks(this)
+
+        FirebaseApp.initializeApp(this)
 
         startKoin() {
             androidLogger()

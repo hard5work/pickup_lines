@@ -11,10 +11,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.speech.tts.TextToSpeech
+import android.speech.tts.UtteranceProgressListener
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.widget.Toast
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,8 +41,11 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -49,12 +55,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -82,7 +90,15 @@ import androidx.core.content.ContextCompat.startActivity
 import androidx.core.content.FileProvider
 import androidx.navigation.NavController
 import com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi
+import com.google.android.gms.ads.AdListener
+import com.google.android.gms.ads.AdRequest
+import com.google.android.gms.ads.AdSize
+import com.google.android.gms.ads.AdView
+import com.google.android.gms.ads.LoadAdError
+import com.joyful.app.pickuplines.R
 import com.joyful.app.pickuplines.TextDownloadableFontsSnippet1.provider
+import com.joyful.app.pickuplines.data.models.AdItem
+import com.joyful.app.pickuplines.data.models.AdModel
 import com.joyful.app.pickuplines.data.models.CategoryList
 import com.joyful.app.pickuplines.data.models.CategoryListModel
 import com.joyful.app.pickuplines.data.models.PickupLineModel
@@ -104,6 +120,7 @@ import com.joyful.app.pickuplines.ui.theme.black
 import com.joyful.app.pickuplines.ui.theme.colorPrimary
 import com.joyful.app.pickuplines.ui.theme.white
 import com.joyful.app.pickuplines.ui.vms.SingleVm
+import com.xdroid.app.service.utils.constants.installApp
 import com.xdroid.app.service.utils.enums.Status
 import com.xdroid.app.service.utils.helper.DebugMode
 import com.xdroid.app.service.utils.helper.DynamicResponse
@@ -115,28 +132,41 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.OutputStream
 import java.time.format.TextStyle
+import java.util.Locale
 import java.util.Random
 import kotlin.text.Typography.quote
 
 
+@RequiresApi(Build.VERSION_CODES.M)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShowCategoriesItems(
     navController: NavController,
-    name:String,
-    title:String
+    name: String,
+    title: String
 ) {
     val myViewModel: SingleVm = koinViewModel()
 
-    val states by myViewModel.getItems.collectAsState()
-    val isDataLoaded = rememberSaveable { mutableStateOf(false) }
+    val context = LocalContext.current
 
-    if (!isDataLoaded.value) {
-        DebugMode.e("askdjhaksjdhjasdahsd ${isDataLoaded.value}")
-        LaunchedEffect(Unit) {
+    val networkHelper: NetworkHelper = koinInject()
+    val states by myViewModel.getItems.collectAsState()
+    val adBanner by myViewModel.adBanner.collectAsState()
+    val isDataLoaded = rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        if (!isDataLoaded.value) {
+            DebugMode.e("askdjhaksjdhjasdahsd ${isDataLoaded.value}")
             myViewModel.getPickupLines(name) // Set as loaded to prevent future calls
         }
+        myViewModel.getADList()
     }
+    LaunchedEffect(Unit) {
+        if (networkHelper.isNetworkConnected()) {
+            if (mInterstitialAd == null)
+                loadInterstitial(context)
+        }
+    }
+
     val itemModel = rememberSaveable { mutableStateOf(PickupLineModel()) }
     var showView by rememberSaveable { mutableStateOf(false) }
     var showAlert by rememberSaveable { mutableStateOf(false) }
@@ -183,54 +213,98 @@ fun ShowCategoriesItems(
 
         }
     }
-        Column(modifier = Modifier
-            .fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 5.dp)
-            ) {
-
-
-                if(showView){
-                    ItemList(
-                        items = categoryItems,
-                        navController = navController
-                    )
-                }
-                else{
-                    LoadingContentColumn()
-                }
-
-                if(showAlert){
-                    InfoAlertDialog(message = alertMessage) {
-                        showAlert = false
-
-                    }
-                }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 5.dp)
+        ) {
 
 
-
+            if (showView) {
+                ItemList(
+                    items = categoryItems,
+                    navController = navController,
+                    adBanner = adBanner
+                )
+            } else {
+                LoadingContentColumn()
             }
+
+            if (showAlert) {
+                InfoAlertDialog(message = alertMessage) {
+                    showAlert = false
+
+                }
+            }
+
 
         }
 
+    }
 
 
 }
 
 
+@RequiresApi(Build.VERSION_CODES.M)
 @Composable
 fun ItemList(
     items: List<PickupModel>?,
-    navController: NavController
+    navController: NavController,
+    adBanner: AdModel? = null
 ) {
     val count = 2
     DebugMode.e("length ${items?.size}")
     val newitems = rememberSaveable(items) {
         itemsWithAds2(items)
+    }
+
+    val context = LocalContext.current
+    val adUnitIds = rememberSaveable { context.getString(R.string.centerBanner) }
+
+    // Keep track of the loading state
+    var isLoading by rememberSaveable { mutableStateOf(true) }
+    var isAdError by rememberSaveable { mutableStateOf(false) }
+
+    // Use a static AdView instance to avoid recreation
+    val adView = remember {
+        AdView(context).apply {
+            setAdSize(AdSize.LARGE_BANNER)
+            adUnitId = adUnitIds
+        }
+    }
+
+    // Set the AdListener only once
+    DisposableEffect(adView) {
+        val adListener = object : AdListener() {
+            override fun onAdLoaded() {
+                DebugMode.e("Banner ad load success")
+                isLoading = false
+                isAdError = false
+            }
+
+            override fun onAdFailedToLoad(error: LoadAdError) {
+                DebugMode.e("Banner ad load Failed-> ${error.message}")
+                isLoading = false
+                isAdError = true
+            }
+        }
+        adView.adListener = adListener
+
+        onDispose {
+            adView.adListener = object : AdListener() {}
+        }
+    }
+
+    // Load the ad only once
+    LaunchedEffect(adView) {
+        adView.loadAd(AdRequest.Builder().build())
     }
     LazyColumn {
 
@@ -248,7 +322,7 @@ fun ItemList(
                 val ite = newitems[index] as PickupModel
                 QuoteBox(quote = ite.text!!, navController)
             } else {
-                AdComposable()
+                AdComposable(adView, isLoading, isAdError, adBanner)
             }
 
         }
@@ -296,6 +370,7 @@ fun PickupItem(
 }
 
 
+@RequiresApi(Build.VERSION_CODES.M)
 @Composable
 fun ShareDialog(onDismiss: () -> Unit, onShareText: String, context: Context) {
     AlertDialog(
@@ -326,7 +401,7 @@ fun ShareDialog(onDismiss: () -> Unit, onShareText: String, context: Context) {
 private fun shareText(quote: String, context: Context) {
     val shareIntent = Intent().apply {
         action = Intent.ACTION_SEND
-        putExtra(Intent.EXTRA_TEXT, quote)
+        putExtra(Intent.EXTRA_TEXT, "$quote $installApp")
         type = "text/plain"
     }
     context.startActivity(
@@ -339,7 +414,7 @@ private fun shareImage(imageFile: Uri, context: Context) {
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "image/png"
         putExtra(Intent.EXTRA_STREAM, imageFile)
-        putExtra(Intent.EXTRA_TEXT, "https://play.google.com/store/apps/details?id=com.xdroid.app.changewallpaper.anime")
+        putExtra(Intent.EXTRA_TEXT, installApp)
         addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
@@ -349,6 +424,7 @@ private fun shareImage(imageFile: Uri, context: Context) {
     )
 }
 
+@RequiresApi(Build.VERSION_CODES.M)
 @Composable
 fun QuoteBox(
     quote: String,
@@ -365,10 +441,8 @@ fun QuoteBox(
     val networkHelper: NetworkHelper = koinInject()
 
     var buttonClicked by rememberSaveable { mutableStateOf(false) }
-    if (networkHelper.isNetworkConnected()) {
-        if (mInterstitialAd == null)
-            loadInterstitial(LocalContext.current)
-    }
+    var readQuote by rememberSaveable { mutableStateOf(false) }
+
 
     var showDialog by remember { mutableStateOf(false) }
 
@@ -400,16 +474,23 @@ fun QuoteBox(
             Column(
             ) {
 
-                Box(modifier = Modifier
-                    .background(color = black)
-                    .fillMaxWidth()) {
+                Box(
+                    modifier = Modifier
+                        .background(color = black)
+                        .fillMaxWidth()
+                ) {
 
-                    Column(modifier = Modifier
-                        .padding(horizontal = 5.dp, vertical = 70.dp)
-                        .fillMaxWidth()) {
-                        Icon(Icons.Default.FormatQuote, contentDescription = "quote" , tint = Color.White, modifier= Modifier
-                            .size(40.dp)
-                            .graphicsLayer { rotationZ = 180f })
+                    Column(
+                        modifier = Modifier
+                            .padding(horizontal = 5.dp, vertical = 70.dp)
+                            .fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.FormatQuote,
+                            contentDescription = "quote",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .graphicsLayer { rotationZ = 180f })
                         Text(
                             text = "$quote",
                             style = androidx.compose.ui.text.TextStyle(
@@ -418,7 +499,10 @@ fun QuoteBox(
                                 fontStyle = FontStyle.Italic,
                                 fontWeight = FontWeight.Medium,
                                 fontFamily = FontFamily(
-                                    Font(googleFont = GoogleFont("Space Mono"), fontProvider = provider)
+                                    Font(
+                                        googleFont = GoogleFont("Space Mono"),
+                                        fontProvider = provider
+                                    )
                                 )
                             ),
                             textAlign = TextAlign.Center,
@@ -426,16 +510,23 @@ fun QuoteBox(
                                 .padding(horizontal = 20.dp)
                                 .fillMaxWidth()
                         )
-                        Icon(Icons.Default.FormatQuote, contentDescription = "quote" , tint = Color.White, modifier = Modifier
-                            .align(Alignment.End)
-                            .size(40.dp) )
+                        Icon(
+                            Icons.Default.FormatQuote,
+                            contentDescription = "quote",
+                            tint = Color.White,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .size(40.dp)
+                        )
                     }
-                    Column( modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(10.dp)) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(10.dp)
+                    ) {
                         IconButton(
                             onClick = {
-                               buttonClicked = true
+                                buttonClicked = true
                             },
                             modifier = Modifier
                                 .background(color = white, shape = CircleShape)
@@ -453,7 +544,6 @@ fun QuoteBox(
                     }
 
 
-
                 }
 
                 // Circular Icon Button at Top Right
@@ -468,8 +558,9 @@ fun QuoteBox(
                 ) {
                     // Copy Button
                     IconButton(onClick = {
-                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(quote))
-                        Toast.makeText(context, "Quote copied to clipboard", Toast.LENGTH_SHORT).show()
+                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString("$quote $installApp"))
+                        Toast.makeText(context, "Quote copied to clipboard", Toast.LENGTH_SHORT)
+                            .show()
                     }) {
                         Icon(
                             imageVector = Icons.Filled.CopyAll,
@@ -488,12 +579,29 @@ fun QuoteBox(
                             tint = textColor
                         )
                     }
+                    TTSScreen(quote = quote)
+
+//                    // Save Button
+//                    IconButton(onClick = {
+//                        // Implement your save logic here
+//                        // For example, save to a database or shared preferences
+//                        readQuote = true
+//
+//                    }) {
+//                        Icon(
+//                            imageVector = Icons.Filled.PlayArrow,
+//                            contentDescription = "Play",
+//                            tint = textColor
+//                        )
+//                    }
 
                     // Save Button
                     IconButton(onClick = {
                         // Implement your save logic here
                         // For example, save to a database or shared preferences
-                        saveQuoteAsImage(context, quote)
+                        saveQuoteAsImage(context, quote, onAction = {
+
+                        })
 
                     }) {
                         Icon(
@@ -512,14 +620,20 @@ fun QuoteBox(
             ShareDialog(onDismiss = { showDialog = false }, onShareText = quote, context)
         }
 
+        if (readQuote) {
+            TTSScreen(quote = quote) {
+                readQuote = false
+            }
+        }
+
 
     }
-   
+
 }
 
 
-
-fun saveQuoteAsImage(context: Context, quote: String) {
+@RequiresApi(Build.VERSION_CODES.M)
+fun saveQuoteAsImage(context: Context, quote: String, onAction: (Boolean) -> Unit) {
     // Check if the device is running API 29 (Android 10) or higher, and if so, use MediaStore for saving images.
     // Create Bitmap and Canvas
 //    val displayMetrics = context.resources.displayMetrics
@@ -529,18 +643,18 @@ fun saveQuoteAsImage(context: Context, quote: String) {
     val width = 1000
     val bitmap = Bitmap.createBitmap(width, width, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-/*
-    // Setup Paint to style text
-    val paint = Paint().apply {
-        color = android.graphics.Color.WHITE
-        textSize = 20f
-        isAntiAlias = true
-        textAlign = Paint.Align.CENTER
-    }
-    // Draw the background (black)
-    canvas.drawColor(android.graphics.Color.RED)
+    /*
+        // Setup Paint to style text
+        val paint = Paint().apply {
+            color = android.graphics.Color.WHITE
+            textSize = 20f
+            isAntiAlias = true
+            textAlign = Paint.Align.CENTER
+        }
+        // Draw the background (black)
+        canvas.drawColor(android.graphics.Color.RED)
 
-    canvas.drawText(quote, (bitmap.width / 2).toFloat(), (bitmap.height / 2).toFloat(), paint)*/
+        canvas.drawText(quote, (bitmap.width / 2).toFloat(), (bitmap.height / 2).toFloat(), paint)*/
     // Setup TextPaint for better text handling
     val textPaint = TextPaint().apply {
         color = android.graphics.Color.WHITE
@@ -556,7 +670,13 @@ fun saveQuoteAsImage(context: Context, quote: String) {
     }
     val padding = 10f
     // Create a StaticLayout to handle multiline text
-    val staticLayout = StaticLayout.Builder.obtain(quote, 0, quote.length, textPaint, width-80) // Subtract 40 for padding
+    val staticLayout = StaticLayout.Builder.obtain(
+        quote,
+        0,
+        quote.length,
+        textPaint,
+        width - 80
+    ) // Subtract 40 for padding
         .setAlignment(Layout.Alignment.ALIGN_CENTER)
         .setLineSpacing(1f, 1f)
         .setIncludePad(false)
@@ -579,7 +699,7 @@ fun saveQuoteAsImage(context: Context, quote: String) {
         .setIncludePad(false)
         .build()
 // Calculate vertical position for the additional text
-    val additionalTextYPosition = (bitmap.height  - 80) // 20 pixels below the quote
+    val additionalTextYPosition = (bitmap.height - 80) // 20 pixels below the quote
     canvas.save()
     canvas.translate(padding, additionalTextYPosition.toFloat()) // Apply horizontal margin
     staticLayoutAdditional.draw(canvas)
@@ -589,15 +709,16 @@ fun saveQuoteAsImage(context: Context, quote: String) {
 
 
         // Save the image using MediaStore API
-        saveImageToMediaStore(context, bitmap)
+        saveImageToMediaStore(context, bitmap, onAction)
     } else {
-        saveImageToExternalStorage(context,bitmap)
+        saveImageToExternalStorage(context, bitmap, onAction)
     }
 
 
 }
 
 
+@RequiresApi(Build.VERSION_CODES.M)
 fun captureBitmapFromView(quote: String): Bitmap {
 
     // Check if the device is running API 29 (Android 10) or higher, and if so, use MediaStore for saving images.
@@ -634,9 +755,15 @@ fun captureBitmapFromView(quote: String): Bitmap {
         textSize = 30f
         isAntiAlias = true
     }
-    val padding =10f
+    val padding = 10f
     // Create a StaticLayout to handle multiline text
-    val staticLayout = StaticLayout.Builder.obtain(quote, 0, quote.length, textPaint, width-80) // Subtract 40 for padding
+    val staticLayout = StaticLayout.Builder.obtain(
+        quote,
+        0,
+        quote.length,
+        textPaint,
+        width - 80
+    ) // Subtract 40 for padding
         .setAlignment(Layout.Alignment.ALIGN_CENTER)
         .setLineSpacing(1f, 1f)
         .setIncludePad(false)
@@ -659,7 +786,7 @@ fun captureBitmapFromView(quote: String): Bitmap {
         .setIncludePad(false)
         .build()
 // Calculate vertical position for the additional text
-    val additionalTextYPosition = (bitmap.height  - 80) // 20 pixels below the quote
+    val additionalTextYPosition = (bitmap.height - 80) // 20 pixels below the quote
     canvas.save()
     canvas.translate(padding, additionalTextYPosition.toFloat()) // Apply horizontal margin
     staticLayoutAdditional.draw(canvas)
@@ -670,25 +797,29 @@ fun captureBitmapFromView(quote: String): Bitmap {
     return bitmap
 }
 
-fun saveImageToExternalStorage(context: Context, bitmap: Bitmap){
+fun saveImageToExternalStorage(context: Context, bitmap: Bitmap, onAction: (Boolean) -> Unit) {
     // For devices running lower API levels (API 28 and below), you can save directly to the external storage as shown previously.
 
     try {
-        val file = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), "${currentTimeMillis}_pickup_lines.png")
+        val file = File(
+            context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            "${currentTimeMillis}_pickup_lines.png"
+        )
         val outputStream = FileOutputStream(file)
         bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
         outputStream.flush()
         outputStream.close()
+        onAction(true)
         Toast.makeText(context, "Quote saved as image", Toast.LENGTH_SHORT).show()
     } catch (e: IOException) {
         e.printStackTrace()
+        onAction(false)
         Toast.makeText(context, "Error saving image", Toast.LENGTH_SHORT).show()
     }
 }
 
 
-
-fun saveImageToMediaStore(context: Context, bitmap: Bitmap) {
+fun saveImageToMediaStore(context: Context, bitmap: Bitmap, onAction: (Boolean) -> Unit) {
     // Get the content resolver
     val contentResolver = context.contentResolver
 
@@ -696,11 +827,15 @@ fun saveImageToMediaStore(context: Context, bitmap: Bitmap) {
     val contentValues = ContentValues().apply {
         put(MediaStore.Images.Media.DISPLAY_NAME, "quote_image_${System.currentTimeMillis()}.png")
         put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-        put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Quotes")  // Save to Pictures/Quotes directory
+        put(
+            MediaStore.Images.Media.RELATIVE_PATH,
+            "Pictures/Quotes"
+        )  // Save to Pictures/Quotes directory
     }
 
     // Insert the image into MediaStore
-    val imageUri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+    val imageUri =
+        contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
 
     // If the insertion is successful, write the Bitmap data to the output stream
     if (imageUri != null) {
@@ -709,22 +844,177 @@ fun saveImageToMediaStore(context: Context, bitmap: Bitmap) {
             outputStream?.use {
                 bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
                 it.flush()
+                onAction(true)
                 Toast.makeText(context, "Quote saved as image", Toast.LENGTH_SHORT).show()
             }
         } catch (e: IOException) {
             e.printStackTrace()
+            onAction(false)
             Toast.makeText(context, "Error saving image", Toast.LENGTH_SHORT).show()
         }
     } else {
+        onAction(false)
         Toast.makeText(context, "Error saving image", Toast.LENGTH_SHORT).show()
     }
 }
 
-fun saveImageToDevice(context: Context, bitmap: Bitmap){
+fun saveImageToDevice(context: Context, bitmap: Bitmap, onAction: (Boolean) -> Unit) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         // Save the image using MediaStore API
-        saveImageToMediaStore(context, bitmap)
+        saveImageToMediaStore(context, bitmap, onAction)
     } else {
-        saveImageToExternalStorage(context,bitmap)
+        saveImageToExternalStorage(context, bitmap, onAction)
+    }
+}
+
+
+@Composable
+fun TTSScreen(quote: String, done: () -> Unit) {
+    val context = LocalContext.current
+
+    var isSpeaking by remember { mutableStateOf(false) }
+    val tts = remember {
+        TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                Locale.US // Set your preferred language
+            }
+        }
+    }
+
+    // Important: Set the listener in a LaunchedEffect to avoid adding it repeatedly
+    LaunchedEffect(tts) {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                isSpeaking = true
+            }
+
+            override fun onDone(utteranceId: String?) {
+                isSpeaking = false
+                done()
+
+            }
+
+            override fun onError(utteranceId: String?) {
+                isSpeaking = false
+                done()
+            }
+        })
+    }
+
+    tts.speak(quote, TextToSpeech.QUEUE_FLUSH, null, null)
+    DisposableEffect(Unit) {
+        onDispose {
+            tts.stop()
+            tts.shutdown()
+        }
+    }
+}
+
+
+@Composable
+fun TTSScreen(quote: String) {
+    val context = LocalContext.current
+    val tts = remember {
+        TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                Locale.US
+            }
+        }
+    }
+    var isSpeaking by remember { mutableStateOf(false) }
+    var isPaused by remember { mutableStateOf(false) }
+
+    // Important: Set the listener in a LaunchedEffect to avoid adding it repeatedly
+    LaunchedEffect(tts) {
+        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+            override fun onStart(utteranceId: String?) {
+                isSpeaking = true
+                isPaused = false
+            }
+
+            override fun onDone(utteranceId: String?) {
+                isSpeaking = false
+                isPaused = false
+            }
+
+            override fun onError(utteranceId: String?) {
+                isSpeaking = false
+                isPaused = false
+                DebugMode.e("Error $utteranceId while playing")
+            }
+
+            override fun onStop(utteranceId: String?, interrupted: Boolean) {
+                isSpeaking = false
+                isPaused = true // Set isPaused to true when manually stopped
+                super.onStop(utteranceId, interrupted)
+            }
+        })
+    }
+
+
+
+    Column(
+        modifier = Modifier,
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Save Button
+        IconButton(onClick = {
+            // Implement your save logic here
+            // For example, save to a database or shared preferences
+            if (!isSpeaking) {
+                if (!isPaused) {
+                    if (quote.isNotBlank()) {
+                        tts.speak(
+                            quote,
+                            TextToSpeech.QUEUE_FLUSH,
+                            null,
+                            "myUtteranceId"
+                        ) // Use an utterance ID
+                    } else {
+                        Toast.makeText(context, "Please enter text", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    tts.playSilentUtterance(
+                        500,
+                        TextToSpeech.QUEUE_ADD,
+                        null
+                    ) // Small pause to resume smoothly
+                    tts.speak(
+                        quote,
+                        TextToSpeech.QUEUE_FLUSH,
+                        null,
+                        "myUtteranceId"
+                    ) // QUEUE_ADD to resume
+                    isPaused = false
+                    isSpeaking = true
+                }
+            } else {
+                if (tts.isSpeaking) {
+                    tts.stop() // Stop the current utterance
+                    isPaused = true
+                    isSpeaking = false
+                }
+//                if (isPaused) {
+//                    tts.playSilentUtterance(500, TextToSpeech.QUEUE_ADD, null) // Small pause to resume smoothly
+//                    tts.speak(quote, TextToSpeech.QUEUE_ADD, null, "myUtteranceId") // QUEUE_ADD to resume
+//                    isPaused = false
+//                    isSpeaking = true
+//                }
+            }
+
+        }) {
+            Icon(
+                imageVector = if (!isSpeaking) Icons.Filled.PlayArrow else Icons.Filled.Stop,
+                contentDescription = "Play",
+                tint = black
+            )
+        }
+        DisposableEffect(Unit) {
+            onDispose {
+                tts.stop()
+                tts.shutdown()
+            }
+        }
     }
 }

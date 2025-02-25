@@ -11,9 +11,6 @@
     <!-- For Android 10 (API level 29) and above -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
 
-    <!-- Camera access for capturing photos -->
-    <uses-feature android:name="android.hardware.camera" />
-    <uses-permission android:name="android.permission.CAMERA" />
 
     <!-- Internet access for online features -->
     <uses-permission android:name="android.permission.INTERNET" />
@@ -32,7 +29,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PickupLines"
-        tools:targetApi="31">
+        android:enableOnBackInvokedCallback="true"
+        android:hardwareAccelerated="true"
+        tools:targetApi="tiramisu">
         <activity
             android:name=".MainActivity"
             android:exported="true"

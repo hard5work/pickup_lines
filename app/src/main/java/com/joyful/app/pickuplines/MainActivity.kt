@@ -56,6 +56,7 @@ import com.joyful.app.pickuplines.ui.layouts.BannerAdView
 import com.joyful.app.pickuplines.ui.layouts.CanvasSaveExample
 import com.joyful.app.pickuplines.ui.layouts.ImagePickerAndDownloader
 import com.joyful.app.pickuplines.ui.layouts.PickupLineMaker
+import com.joyful.app.pickuplines.ui.layouts.QuoteEditorApp
 import com.joyful.app.pickuplines.ui.layouts.SaveImageFromLocalExample
 import com.joyful.app.pickuplines.ui.layouts.lists.ShowCategories
 import com.joyful.app.pickuplines.ui.layouts.lists.ShowCategoriesItems
@@ -93,21 +94,40 @@ class MainActivity : ComponentActivity() {
         preferenceHelper.setValue(PrefConstant.COUNTER, 0)
         // Start the 15-minute countdown timer
         loadInterstitial(this)
-//        timer = object : CountDownTimer(15 * 60 * 1000, 1000) { // 15 minutes
-//            override fun onTick(millisUntilFinished: Long) {
-//                val minutes = (millisUntilFinished / 1000) / 60
-//                val seconds = (millisUntilFinished / 1000) % 60
-//                val time = String.format(Locale.ENGLISH, "%02d:%02d", minutes, seconds)
-//                DebugMode.e("Time Left $time")
-//            }
-//
-//            override fun onFinish() {
-//                showInterstitial(this@MainActivity) {
-//                    timer.start()
-//                }
-//            }
-//        }
-//        timer.start()
+        timer = object : CountDownTimer(5 * 60 * 1000, 1000) { // 15 minutes
+            override fun onTick(millisUntilFinished: Long) {
+                val minutes = (millisUntilFinished / 1000) / 60
+                val seconds = (millisUntilFinished / 1000) % 60
+                val time = String.format(Locale.ENGLISH, "%02d:%02d", minutes, seconds)
+                DebugMode.e("Time Left $time")
+            }
+
+            override fun onFinish() {
+                val dialog = android.app.AlertDialog.Builder(this@MainActivity)
+                dialog.setTitle("Scrolling for too long")
+                dialog.setMessage("Take a small break to continue.")
+                dialog.setCancelable(false)
+                dialog.setPositiveButton("View an ad") { dialog, _ ->
+                    // Handle OK button click
+                    if (mInterstitialAd == null) {
+                        loadInterstitial(this@MainActivity) { _ ->
+                            showInterstitial(this@MainActivity) {
+                                timer.start()
+                            }
+                        }
+
+                    } else {
+                        showInterstitial(this@MainActivity) {
+                            timer.start()
+                        }
+                    }
+//                    showInterstialAds()
+                    dialog.dismiss() // Close the dialog
+                }
+                dialog.show()
+            }
+        }
+        timer.start()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requestPermissionsLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -199,6 +219,7 @@ class MainActivity : ComponentActivity() {
                             )
                             {
                                 MyApp(navController = navController, mainViewModel)
+//                                QuoteEditorApp()
 
                             }
 

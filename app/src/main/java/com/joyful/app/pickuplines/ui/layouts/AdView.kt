@@ -345,7 +345,7 @@ fun ShimmerAdPlaceHolder(
 
 var mInterstitialAd: InterstitialAd? = null
 
-fun loadInterstitial(context: Context) {
+fun loadInterstitial(context: Context, onDataLoaded: (Boolean) -> Unit = {}) {
     InterstitialAd.load(
         context,
         context.getString(R.string.interstital), //Change this with your own AdUnitID!
@@ -353,14 +353,14 @@ fun loadInterstitial(context: Context) {
         object : InterstitialAdLoadCallback() {
             override fun onAdFailedToLoad(adError: LoadAdError) {
                 mInterstitialAd = null
-
-                DebugMode.e("onAdFailedToLoad ${adError.message}")
+                onDataLoaded(false)
+                DebugMode.e("onAdFailedToLoad  from loadInterstitialAd ->${adError.message}")
             }
 
             override fun onAdLoaded(interstitialAd: InterstitialAd) {
                 mInterstitialAd = interstitialAd
-
-                DebugMode.e("Success Ful onAdLoaded")
+                onDataLoaded(true)
+                DebugMode.e("Success Ful onAdLoaded from loadInterstitialAd")
             }
         }
     )

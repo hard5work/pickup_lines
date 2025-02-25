@@ -1,5 +1,6 @@
 package com.joyful.app.pickuplines.ui.layouts.lists
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +33,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -63,6 +65,7 @@ import com.joyful.app.pickuplines.data.models.AdModel
 import com.joyful.app.pickuplines.data.models.CategoryList
 import com.joyful.app.pickuplines.data.models.CategoryListModel
 import com.joyful.app.pickuplines.ui.dialogs.InfoAlertDialog
+import com.joyful.app.pickuplines.ui.dialogs.LoadingAlertDialog
 import com.joyful.app.pickuplines.ui.layouts.AdComposable
 import com.joyful.app.pickuplines.ui.layouts.BannerAdView
 import com.joyful.app.pickuplines.ui.layouts.CheesyLoader
@@ -83,6 +86,8 @@ import com.joyful.app.pickuplines.ui.theme.red
 import com.joyful.app.pickuplines.ui.theme.secondaryColor
 import com.joyful.app.pickuplines.ui.theme.tertiary
 import com.joyful.app.pickuplines.ui.vms.SingleVm
+import com.xdroid.app.service.App.Companion.preferenceHelper
+import com.xdroid.app.service.utils.constants.PrefConstant
 import com.xdroid.app.service.utils.enums.Status
 import com.xdroid.app.service.utils.helper.DebugMode
 import com.xdroid.app.service.utils.helper.DynamicResponse
@@ -101,12 +106,17 @@ fun ShowCategories(
 
     val states by myViewModel.getCat.collectAsState()
     val isDataLoaded = rememberSaveable { mutableStateOf(false) }
+
+    val adBanner by myViewModel.adBanner.collectAsState()
     LaunchedEffect(Unit) {
         if (!isDataLoaded.value) {
             DebugMode.e("askdjhaksjdhjasdahsd ${isDataLoaded.value}")
 
             myViewModel.getCategories() // Set as loaded to prevent future calls
 
+
+        }
+        if (adBanner == null){
             myViewModel.getADList()
         }
     }
@@ -114,7 +124,6 @@ fun ShowCategories(
     var showView by rememberSaveable { mutableStateOf(false) }
     var showAlert by rememberSaveable { mutableStateOf(false) }
     var alertMessage by rememberSaveable { mutableStateOf("") }
-    val adBanner by myViewModel.adBanner.collectAsState(null)
     var categoryItems by rememberSaveable { mutableStateOf(listOf<CategoryList>()) }
 
 
@@ -291,12 +300,38 @@ fun NavigationItem(
 //        if (mInterstitialAd == null)
 //            loadInterstitial(LocalContext.current)
 //    }
-    Card(
+    var navigate by remember {
+        mutableStateOf(
+            false
+        )
+    }
+    var counter by remember {
+        mutableIntStateOf(preferenceHelper.getValue(PrefConstant.COUNTER, 0) as Int)
+    }
 
-        modifier = modifier
-            .padding(8.dp)
-//            .shadow(elevation = 1.dp, shape = RoundedCornerShape(10.dp))
-            .clickable {
+
+    var showloading by remember {
+        mutableStateOf(
+            false
+        )
+    }
+    if (navigate) {
+        navigate = false
+        if (counter < 5) {
+            navController.navigate(
+                ScreenName.detailRoute(
+                    ScreenName.ItemScreen,
+                    item.id!!,
+                    item.name!!
+                )
+            )
+            counter += 1
+            preferenceHelper.setValue(PrefConstant.COUNTER, counter)
+            counter = preferenceHelper.getValue(PrefConstant.COUNTER, 0) as Int
+        } else {
+            showloading = true
+            showInterstitial(LocalContext.current) {
+
                 navController.navigate(
                     ScreenName.detailRoute(
                         ScreenName.ItemScreen,
@@ -304,6 +339,28 @@ fun NavigationItem(
                         item.name!!
                     )
                 )
+                counter = 0
+                showloading = false
+                preferenceHelper.setValue(PrefConstant.COUNTER, counter)
+                counter = preferenceHelper.getValue(PrefConstant.COUNTER, 0) as Int
+            }
+        }
+
+
+    }
+
+    if (showloading) {
+        LoadingAlertDialog()
+    }
+
+    Card(
+
+        modifier = modifier
+            .padding(8.dp)
+//            .shadow(elevation = 1.dp, shape = RoundedCornerShape(10.dp))
+            .clickable {
+                navigate = true
+
 
 
             },

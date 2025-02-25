@@ -9,9 +9,12 @@ import android.content.pm.PackageManager
 import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.BitmapShader
 import android.graphics.BlurMaskFilter
 import android.graphics.Canvas
+import android.graphics.ComposeShader
 import android.graphics.Paint
+import android.graphics.PorterDuff
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -21,6 +24,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.renderscript.Allocation
+import android.renderscript.Element
 import android.renderscript.RenderScript
 import android.renderscript.ScriptIntrinsicBlur
 import android.text.Layout
@@ -32,6 +36,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -69,14 +74,19 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
@@ -124,7 +134,9 @@ import com.skydoves.colorpickerview.sliders.BrightnessSlideBar
 import com.skydoves.orchestra.colorpicker.AlphaSlideBar
 import com.skydoves.orchestra.colorpicker.BrightnessSlideBar
 import com.skydoves.orchestra.colorpicker.ColorPicker
+import com.xdroid.app.service.utils.helper.DebugMode
 import com.xdroid.app.service.utils.helper.NetworkHelper
+import kotlinx.coroutines.coroutineScope
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
@@ -136,7 +148,6 @@ import java.io.IOException
 import java.util.Objects
 import kotlin.text.Typography.quote
 
-@RequiresApi(Build.VERSION_CODES.M)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navController: NavController) {
@@ -169,6 +180,7 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
     var showTools by remember {
         mutableStateOf(true)
     }
+
     var showFonts by remember {
         mutableStateOf(false)
     }
@@ -223,6 +235,10 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
     var shadowBlurRadius by remember { mutableStateOf(0f) }
     var imageBlur by remember { mutableStateOf(0f) }
 
+    var backgroundImage by remember { mutableStateOf<ImageBitmap?>(null) }
+    val currentBlur by rememberUpdatedState(imageBlur)
+
+//
 
     val context = LocalContext.current
     val file = context.createImageFile()
@@ -271,10 +287,17 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
                     imageUri = Uri.parse(data.data.toString())
                     if (imageUri.toString().isNotEmpty()) {
                         Log.d("myImageUri", "$imageUri ")
+                        val imageBitmap = context.loadImageBitmap(imageUri!!, context, 0)
+                        backgroundImage = imageBitmap
                     }
                 }
             }
         }
+//    LaunchedEffect(imageUri, currentBlur) {
+//        imageUri?.let {
+//            backgroundImage = context.loadImageBitmap(it)
+//        }
+//    }
 
     val galleryPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -359,434 +382,440 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
 //    }
 
 
-        Column(
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+    ) {
+        // Preview Area
+        Box(
             modifier = Modifier
-                .fillMaxSize()
-        ) {
-            // Preview Area
-            Box(
-                modifier = Modifier
-                    .weight(1f)
+                .weight(1f)
 //                .size(1000.dp)
-                    .fillMaxWidth()
-                    .padding(16.dp)
-                    .border(1.dp, backgroundColor, RoundedCornerShape(8.dp))
-            ) {
-                // Background (Image or Color)
-                imageUri?.let { uri ->
-                    AsyncImage(
-                        model = uri,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .blur(imageBlur.dp)
-                            .clip(RoundedCornerShape(8.dp)),
-
-                        contentScale = ContentScale.Crop,
-                        alpha = alpha,
-                        onSuccess = { result ->
-                            // Capture the bitmap from the loaded image
-                            bitmap = (result.result.image as BitmapImage).bitmap
-
-                        },
-                        onError = {
-
-                            // Handle error if needed
-//                Toast.makeText(LocalContext.current, "Error loading image", Toast.LENGTH_SHORT).show()
-                        }
-                    )
-                } ?: Box(
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 500.dp, minWidth = 500.dp)
+                .padding(16.dp)
+                .border(1.dp, backgroundColor, RoundedCornerShape(8.dp))
+        ) {
+            // Background (Image or Color)
+            imageUri?.let { uri ->
+                AsyncImage(
+                    model = uri,
+                    contentDescription = null,
                     modifier = Modifier
                         .fillMaxSize()
-                        .let {
-                            if (useGradient) {
-                                it.background(
-                                    Brush.verticalGradient(
-                                        listOf(firstColor, secondColor)
-                                    ),
-                                    shape = RoundedCornerShape(8.dp)
-                                )
-                            } else {
-                                it.background(backgroundColor, shape = RoundedCornerShape(8.dp))
-                            }
-                        },
+                        .blur(imageBlur.dp)
+                        .clip(RoundedCornerShape(8.dp)),
 
-                    )
+                    contentScale = ContentScale.Crop,
+                    alpha = alpha,
+                    onSuccess = { result ->
+                        // Capture the bitmap from the loaded image
+                        bitmap = (result.result.image as BitmapImage).bitmap
+//                        val imageBitmap = context.loadImageBitmap(imageUri!!)
+//                        backgroundImage = imageBitmap
+                        val imageBitmap =
+                            context.loadImageBitmap(imageUri!!, context, imageBlur.toInt())
+                        backgroundImage = imageBitmap
 
-                // Editable TextField
-                BasicTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .padding(
-                            start = leftPadding.dp,
-                            top = topPadding.dp,
-                            end = rightPadding.dp,
-                            bottom = bottomPadding.dp
-                        )
-                        .alpha(opacity)
-                        .let {
-                            if (showBorder) {
-                                it
-                                    .border(
-                                        width = 1.dp,
-                                        color = textColor.copy(alpha = 0.3f),
-                                        shape = RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(8.dp)
-                            } else {
-                                it
-                            }
-                        },
-                    textStyle = TextStyle(
-                        fontSize = fontSize.sp,
-                        color = textColor,
-                        fontFamily = selectedFont,
-                        textAlign = currentAlignment,
-                        fontStyle = currentFontStyle,
-                        fontWeight = currentFontWeight,
-                        shadow = Shadow(
-                            color = shadowColor,
-                            offset = Offset(shadowOffsetX, shadowOffsetY),
-                            blurRadius = shadowBlurRadius
-                        )
-                    ),
-                    decorationBox = { innerTextField ->
-                        Box(
-                            contentAlignment = when (textAlignment) {
-                                TextAlign.Center -> Alignment.Center
-                                TextAlign.End -> Alignment.CenterEnd
-                                else -> Alignment.CenterStart
-                            }
-                        ) {
-                            innerTextField()
+                    },
+                    onError = {
+
+                        // Handle error if needed
+//                Toast.makeText(LocalContext.current, "Error loading image", Toast.LENGTH_SHORT).show()
+                    }
+                )
+            } ?: Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .let {
+                        if (useGradient) {
+                            it.background(
+                                Brush.verticalGradient(
+                                    listOf(firstColor, secondColor)
+                                ),
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        } else {
+                            it.background(backgroundColor, shape = RoundedCornerShape(8.dp))
                         }
                     },
-                    cursorBrush = SolidColor(textColor)
+
                 )
-            }
 
-            if (showTools) {
-                // Control Panel
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(7),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp),
-                    contentPadding = PaddingValues(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    item {
-                        /* Show font size dialog */
-                        IconButton(
-                            onClick = {
-                                showFontSize = true
-                                showTools = false
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.TextFields,
-                                contentDescription = "Text Size"
-                            )
+            // Editable TextField
+            BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(
+                        start = leftPadding.dp,
+                        top = topPadding.dp,
+                        end = rightPadding.dp,
+                        bottom = bottomPadding.dp
+                    )
+                    .alpha(opacity)
+                    .let {
+                        if (showBorder) {
+                            it
+                                .border(
+                                    width = 1.dp,
+                                    color = textColor.copy(alpha = 0.3f),
+                                    shape = RoundedCornerShape(4.dp)
+                                )
+                                .padding(8.dp)
+                        } else {
+                            it
                         }
-                    }
-                    item {
-                        /* Show color picker */
-                        IconButton(
-                            onClick = {
-                                showColorDialog = true
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Palette,
-                                contentDescription = "Text Color"
-                            )
+                    },
+                textStyle = TextStyle(
+                    fontSize = fontSize.sp,
+                    color = textColor,
+                    fontFamily = selectedFont,
+                    textAlign = currentAlignment,
+                    fontStyle = currentFontStyle,
+                    fontWeight = currentFontWeight,
+                    shadow = Shadow(
+                        color = shadowColor,
+                        offset = Offset(shadowOffsetX, shadowOffsetY),
+                        blurRadius = shadowBlurRadius
+                    )
+                ),
+                decorationBox = { innerTextField ->
+                    Box(
+                        contentAlignment = when (textAlignment) {
+                            TextAlign.Center -> Alignment.Center
+                            TextAlign.End -> Alignment.CenterEnd
+                            else -> Alignment.CenterStart
                         }
+                    ) {
+                        innerTextField()
                     }
-                    item {
-                        /* Show Font Family Picker */
-                        IconButton(
-                            onClick = {
-                                showFonts = true
-                                showTools = false
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FontDownload,
-                                contentDescription = "Fonts"
-                            )
-                        }
-                    }
-                    item {
+                },
+                cursorBrush = SolidColor(textColor)
+            )
+        }
 
-                        /*Text Alignment */
-                        IconButton(
-                            onClick = { cycleAlignment() }
-                        ) {
-                            Icon(
-                                imageVector = currentAlignmentIcon,
-                                contentDescription = when (currentAlignment) {
-                                    TextAlign.Center -> "Center Align"
-                                    TextAlign.Start -> "Left Align"
-                                    TextAlign.End -> "Right Align"
-                                    else -> "Align Text"
-                                }
-                            )
+        if (showTools) {
+            // Control Panel
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(7),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp),
+                contentPadding = PaddingValues(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    /* Show font size dialog */
+                    IconButton(
+                        onClick = {
+                            showFontSize = true
+                            showTools = false
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.TextFields,
+                            contentDescription = "Text Size"
+                        )
                     }
-                    item {
-                        /* Show padding controls */
-                        IconButton(
-                            onClick = {
+                }
+                item {
+                    /* Show color picker */
+                    IconButton(
+                        onClick = {
+                            showColorDialog = true
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Text Color"
+                        )
+                    }
+                }
+                item {
+                    /* Show Font Family Picker */
+                    IconButton(
+                        onClick = {
+                            showFonts = true
+                            showTools = false
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FontDownload,
+                            contentDescription = "Fonts"
+                        )
+                    }
+                }
+                item {
 
-                                showPaddingView = true
-                                showTools = false
+                    /*Text Alignment */
+                    IconButton(
+                        onClick = { cycleAlignment() }
+                    ) {
+                        Icon(
+                            imageVector = currentAlignmentIcon,
+                            contentDescription = when (currentAlignment) {
+                                TextAlign.Center -> "Center Align"
+                                TextAlign.Start -> "Left Align"
+                                TextAlign.End -> "Right Align"
+                                else -> "Align Text"
                             }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Padding,
-                                contentDescription = "Padding"
-                            )
-                        }
+                        )
                     }
-                    item {
+                }
+                item {
+                    /* Show padding controls */
+                    IconButton(
+                        onClick = {
 
-                        /* Show Text Styles, */
-                        IconButton(
-                            onClick = {
-                                cycleFontStyle()
-                            }
-                        ) {
-                            Icon(
-                                imageVector = currentStyleIcon,
-                                contentDescription = "Text style"
-                            )
+                            showPaddingView = true
+                            showTools = false
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Padding,
+                            contentDescription = "Padding"
+                        )
                     }
-                    item {
+                }
+                item {
 
-                        /* Show Text Styles, */
-                        IconButton(
-                            onClick = {
-                                showShadow = true
-                                showTools = false
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Inbox,
-                                contentDescription = "Box Shadow"
-                            )
+                    /* Show Text Styles, */
+                    IconButton(
+                        onClick = {
+                            cycleFontStyle()
                         }
+                    ) {
+                        Icon(
+                            imageVector = currentStyleIcon,
+                            contentDescription = "Text style"
+                        )
                     }
-                    item {
-                        IconButton(
-                            onClick = {
-                                useGradient = true
-                                showGrad = true
-                                showTools = false
-                                imageUri = null
+                }
+                item {
 
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Gradient,
-                                contentDescription = "Gradient"
-                            )
+                    /* Show Text Styles, */
+                    IconButton(
+                        onClick = {
+                            showShadow = true
+                            showTools = false
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Inbox,
+                            contentDescription = "Box Shadow"
+                        )
                     }
-                    item {
-                        /* Show color picker */
-                        IconButton(
-                            onClick = {
-                                useGradient = false
-                                changeBackgroundColor = true
-                                imageUri = null
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ColorLens,
-                                contentDescription = "Color"
-                            )
+                }
+                item {
+                    IconButton(
+                        onClick = {
+                            useGradient = true
+                            showGrad = true
+                            showTools = false
+                            imageUri = null
+
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Gradient,
+                            contentDescription = "Gradient"
+                        )
                     }
-                    item {
-                        IconButton(
-                            onClick = {
-                                val permissionCheckResult =
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.READ_MEDIA_IMAGES
-                                        ) == PackageManager.PERMISSION_GRANTED
-                                    } else {
-                                        ContextCompat.checkSelfPermission(
-                                            context,
-                                            Manifest.permission.WRITE_EXTERNAL_STORAGE
-                                        ) == PackageManager.PERMISSION_GRANTED &&
-                                                ContextCompat.checkSelfPermission(
-                                                    context,
-                                                    Manifest.permission.READ_EXTERNAL_STORAGE
-                                                ) == PackageManager.PERMISSION_GRANTED
-                                    }
-                                if (permissionCheckResult) {
-                                    val galleryIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
-                                        type = "image/*"
-                                    }
-                                    galleryLauncher.launch(galleryIntent)
+                }
+                item {
+                    /* Show color picker */
+                    IconButton(
+                        onClick = {
+                            useGradient = false
+                            changeBackgroundColor = true
+                            imageUri = null
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ColorLens,
+                            contentDescription = "Color"
+                        )
+                    }
+                }
+                item {
+                    IconButton(
+                        onClick = {
+                            val permissionCheckResult =
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.READ_MEDIA_IMAGES
+                                    ) == PackageManager.PERMISSION_GRANTED
                                 } else {
-                                    // Request a permission
-                                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                        galleryPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
-                                    } else {
-                                        galleryPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
-                                    }
+                                    ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                    ) == PackageManager.PERMISSION_GRANTED &&
+                                            ContextCompat.checkSelfPermission(
+                                                context,
+                                                Manifest.permission.READ_EXTERNAL_STORAGE
+                                            ) == PackageManager.PERMISSION_GRANTED
+                                }
+                            if (permissionCheckResult) {
+                                val galleryIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                                    type = "image/*"
+                                }
+                                galleryLauncher.launch(galleryIntent)
+                            } else {
+                                // Request a permission
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    galleryPermissionLauncher.launch(Manifest.permission.READ_MEDIA_IMAGES)
+                                } else {
+                                    galleryPermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
                                 }
                             }
-                        ) {
-                            Icon(imageVector = Icons.Default.Image, contentDescription = "Image")
                         }
+                    ) {
+                        Icon(imageVector = Icons.Default.Image, contentDescription = "Image")
                     }
-                    /* Show opacity slider */
-                    item {
-                        IconButton(
-                            onClick = {
-                                showOpacity = true
-                                showTools = false
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Opacity,
-                                contentDescription = "Opacity"
-                            )
+                }
+                /* Show opacity slider */
+                item {
+                    IconButton(
+                        onClick = {
+                            showOpacity = true
+                            showTools = false
                         }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Opacity,
+                            contentDescription = "Opacity"
+                        )
                     }
-                    /*Image Blur*/
-                    item {
-                        IconButton(
-                            onClick = {
-                                showImageBlur = true
-                                showTools = false
-                            }
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.BlurOn,
-                                contentDescription = "Blur Image"
-                            )
-                        }
-                    }
-                    item {
+                }
+                /*Image Blur*/
+//                item {
+//                    IconButton(
+//                        onClick = {
+//                            showImageBlur = true
+//                            showTools = false
+//                        }
+//                    ) {
+//                        Icon(
+//                            imageVector = Icons.Default.BlurOn,
+//                            contentDescription = "Blur Image"
+//                        )
+//                    }
+//                }
+                item {
 
-                        IconButton(
-                            onClick = {
-                                saveImage = true
+                    IconButton(
+                        onClick = {
+                            saveImage = true
 
-                            }
-                        ) {
-                            Icon(imageVector = Icons.Default.Save, contentDescription = "Save")
                         }
+                    ) {
+                        Icon(imageVector = Icons.Default.Save, contentDescription = "Save")
                     }
-                    item {
+                }
+                item {
 /* Share image */
-                        IconButton(
-                            onClick = { shareMessage = true }
-                        ) {
-                            Icon(imageVector = Icons.Default.Share, contentDescription = "Share")
-                        }
+                    IconButton(
+                        onClick = { shareMessage = true }
+                    ) {
+                        Icon(imageVector = Icons.Default.Share, contentDescription = "Share")
                     }
                 }
-            } else {
-                if (showFontSize) {
-                    FontSizeDialog(currentSize = fontSize, onSizeChange = { fs ->
-                        fontSize = fs
-                    }) {
-                        showFontSize = false
-                        showTools = true
+            }
+        } else {
+            if (showFontSize) {
+                FontSizeDialog(currentSize = fontSize, onSizeChange = { fs ->
+                    fontSize = fs
+                }) {
+                    showFontSize = false
+                    showTools = true
 
-                    }
                 }
-                if (showImageBlur) {
-                    ImageBlurSelection(currentSize = imageBlur, onSizeChange = { fs ->
-                        imageBlur = fs
-                    }) {
-                        showImageBlur = false
-                        showTools = true
+            }
+            if (showImageBlur) {
+                ImageBlurSelection(currentSize = imageBlur, onSizeChange = { fs ->
+                    imageBlur = fs
+                }) {
+                    showImageBlur = false
+                    showTools = true
 
-                    }
                 }
-                if (showFonts) {
-                    FontSelectionScreen(onFontSelected = { fontFamily ->
-                        selectedFont = fontFamily
+            }
+            if (showFonts) {
+                FontSelectionScreen(onFontSelected = { fontFamily ->
+                    selectedFont = fontFamily
+                }, onClicked = {
+                    showFonts = false
+                    showTools = true
+                })
+            }
+            if (showOpacity) {
+                ChangeOpacity(alpha = alpha, onValueChange = {
+                    alpha = it
+                }) {
+                    showOpacity = false
+                    showTools = true
+                }
+            }
+            if (showShadow) {
+                ShadowPicker(color = shadowColor,
+                    offX =
+                    shadowOffsetX,
+                    offY = shadowOffsetY,
+                    blurRadius = shadowBlurRadius,
+                    updated = { c, x, y, r ->
+                        shadowColor = c
+                        shadowOffsetX = x
+                        shadowOffsetY = y
+                        shadowBlurRadius = r
+                    }) {
+                    showShadow = false
+                    showTools = true
+
+                }
+            }
+            if (showPaddingView) {
+
+                PaddingAdjusterDemo(
+                    top = topPadding,
+                    bottom = bottomPadding,
+                    left = leftPadding,
+                    right = rightPadding,
+                    padding = { top, btm, left, right ->
+                        topPadding = top
+                        bottomPadding = btm
+                        leftPadding = left
+                        rightPadding = right
                     }, onClicked = {
-                        showFonts = false
+                        showPaddingView = false
                         showTools = true
                     })
-                }
-                if (showOpacity) {
-                    ChangeOpacity(alpha = alpha, onValueChange = {
-                        alpha = it
-                    }) {
-                        showOpacity = false
-                        showTools = true
-                    }
-                }
-                if (showShadow) {
-                    ShadowPicker(color = shadowColor,
-                        offX =
-                        shadowOffsetX,
-                        offY = shadowOffsetY,
-                        blurRadius = shadowBlurRadius,
-                        updated = { c, x, y, r ->
-                            shadowColor = c
-                            shadowOffsetX = x
-                            shadowOffsetY = y
-                            shadowBlurRadius = r
-                        }) {
-                        showShadow = false
-                        showTools = true
-
-                    }
-                }
-                if (showPaddingView) {
-
-                    PaddingAdjusterDemo(
-                        top = topPadding,
-                        bottom = bottomPadding,
-                        left = leftPadding,
-                        right = rightPadding,
-                        padding = { top, btm, left, right ->
-                            topPadding = top
-                            bottomPadding = btm
-                            leftPadding = left
-                            rightPadding = right
-                        }, onClicked = {
-                            showPaddingView = false
-                            showTools = true
-                        })
-                }
-
-                if (showGrad) {
-                    GradientColor(
-                        currentFirstColor = firstColor,
-                        currentSecondColor = secondColor,
-                        onColorFirstChange = {
-                            firstColor = it
-                        },
-                        onColorSecondChange = {
-                            secondColor = it
-                        }
-
-                    ) {
-                        showTools = true
-                        showGrad = false
-
-                    }
-                }
-
             }
 
-            if (saveImage) {
+            if (showGrad) {
+                GradientColor(
+                    currentFirstColor = firstColor,
+                    currentSecondColor = secondColor,
+                    onColorFirstChange = {
+                        firstColor = it
+                    },
+                    onColorSecondChange = {
+                        secondColor = it
+                    }
+
+                ) {
+                    showTools = true
+                    showGrad = false
+
+                }
+            }
+
+        }
+
+        if (saveImage) {
 //            if (bitmap!= null){
 //              saveImageWithText(bitmap!!,text,context)
 //            }
@@ -795,62 +824,310 @@ fun PickupLineMaker(quoteText: String = "Today is a beautiful day.", navControll
 //                    saveImage = false
 //                    Log.e("asdad", it + " akjdjhasgdjhasgdjhas ")
 //                }
-                saveQuoteToDevice(
-                    context,
-                    text,
-                    backgroundColor,
-                    imageUri,
-                    blurRadius = imageBlur,
-                    imageOpacity = alpha,
-                    textColor = textColor,
-                    textAlign = currentAlignment,
-                    fontFamily = fontFamily,
-                    shadowColor = shadowColor,
-                    offsetX =shadowOffsetX,
-                    offsetY = shadowOffsetY,
-                    shadowBlur = shadowBlurRadius,
-                   topPadding =  topPadding,
-                    bottomPadding = bottomPadding,
-                    leftPadding = leftPadding,
-                    rightPadding = rightPadding,
-                    fontSize = fontSize,
-                    onAction = {
-                        com->
-                        saveImage = false
 
+            /* saveQuoteToDevice(
+                 context,
+                 text,
+                 backgroundColor,
+                 imageUri,
+                 blurRadius = imageBlur,
+                 imageOpacity = alpha,
+                 textColor = textColor,
+                 textAlign = currentAlignment,
+                 fontFamily = fontFamily,
+                 shadowColor = shadowColor,
+                 offsetX =shadowOffsetX,
+                 offsetY = shadowOffsetY,
+                 shadowBlur = shadowBlurRadius,
+                topPadding =  topPadding,
+                 bottomPadding = bottomPadding,
+                 leftPadding = leftPadding,
+                 rightPadding = rightPadding,
+                 fontSize = fontSize,
+                 onAction = {
+                     com->
+                     saveImage = false
+
+                 }
+             )*/
+            LaunchedEffect(saveImage) {
+                saveComposableAsImage(
+                    composable = {
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(1f)
+                                .let {
+                                    if (useGradient) {
+                                        it.background(
+                                            Brush.verticalGradient(
+                                                listOf(firstColor, secondColor)
+                                            ),
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    } else {
+                                        it.background(
+                                            backgroundColor,
+                                            shape = RoundedCornerShape(8.dp)
+                                        )
+                                    }
+                                }
+                        ) {
+
+                            backgroundImage?.let { image ->
+                                val isBlurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                                DebugMode.e("Is blur supported $isBlurSupported")
+//                                backgroundImage = if (isBlurSupported) {
+//                                    applyBlurWithRenderEffect(
+//                                        image.asAndroidBitmap(),
+//                                        imageBlur
+//                                    ).asImageBitmap()
+//                                } else {
+//                                    applyBlurWithBlurMaskFilter(
+//                                        image.asAndroidBitmap(),
+//                                        imageBlur
+//                                    ).asImageBitmap()
+//                                }
+                                Image(
+                                    bitmap = image,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .blur(
+                                            radiusX = imageBlur.dp,
+                                            radiusY = imageBlur.dp,
+                                            edgeTreatment = BlurredEdgeTreatment.Unbounded
+                                        )
+//                                    .blur(imageBlur.dp) // Then apply blur
+//                                    .graphicsLayer {
+//                                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+//                                            renderEffect = RenderEffect.createBlurEffect(
+//                                                imageBlur,
+//                                                imageBlur,
+//                                                Shader.TileMode.DECAL
+//                                            ).asComposeRenderEffect()
+//                                        }
+//                                    }
+
+                                        .clip(RoundedCornerShape(8.dp)) // Apply clipping first
+                                        .alpha(alpha),
+                                    contentScale = ContentScale.Crop
+                                )
+
+
+                            }
+                            Text(
+                                text = text,
+                                modifier = Modifier
+                                    .align(Alignment.Center)
+                                    .padding(
+                                        start = leftPadding.dp,
+                                        top = topPadding.dp,
+                                        end = rightPadding.dp,
+                                        bottom = bottomPadding.dp
+                                    )
+                                    .alpha(opacity)
+                                    .let {
+                                        if (showBorder) {
+                                            it
+                                                .border(
+                                                    width = 1.dp,
+                                                    color = textColor.copy(alpha = 0.3f),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                )
+                                                .padding(8.dp)
+                                        } else {
+                                            it
+                                        }
+                                    },
+                                style = TextStyle(
+                                    fontSize = fontSize.sp,
+                                    color = textColor,
+                                    fontFamily = selectedFont,
+                                    textAlign = currentAlignment,
+                                    fontStyle = currentFontStyle,
+                                    fontWeight = currentFontWeight,
+                                    shadow = Shadow(
+                                        color = shadowColor,
+                                        offset = Offset(shadowOffsetX, shadowOffsetY),
+                                        blurRadius = shadowBlurRadius
+                                    )
+                                )
+                            )
+
+                            Text(
+                                text = "©Joyful",
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(
+                                        bottom = 20.dp
+                                    ),
+                                style = TextStyle(
+                                    fontSize = 12.sp,
+                                    color = textColor,
+                                    fontFamily = selectedFont,
+                                    textAlign = currentAlignment,
+                                    fontStyle = currentFontStyle,
+                                    fontWeight = FontWeight.Normal,
+                                )
+                            )
+
+                        }
+
+                    }, context = context,
+                    onAction = {
+                        saveImage = false
                     }
                 )
+            }
 //            }
-            }
-
-            if (showColorDialog) {
-                ColorPickerDialog(currentColor = textColor, onColorChange = { c ->
-                    textColor = Color(c)
-                }, onDismiss = {
-                    showColorDialog = false
-                }) {
-                    showColorDialog = false
-                }
-
-            }
-            if (shareMessage) {
-                ShareCardView(share = shareMessage) {
-                    shareMessage = it
-
-                }
-
-            }
-            if (changeBackgroundColor) {
-                ColorPickerDialog(currentColor = backgroundColor, onColorChange = { c ->
-                    backgroundColor = Color(c)
-                }, onDismiss = {
-                    changeBackgroundColor = false
-                }) {
-                    changeBackgroundColor = false
-                }
-
-            }
         }
+
+        if (showColorDialog) {
+            ColorPickerDialog(currentColor = textColor, onColorChange = { c ->
+                textColor = Color(c)
+            }, onDismiss = {
+                showColorDialog = false
+            }) {
+                showColorDialog = false
+            }
+
+        }
+        if (shareMessage) {
+            ShareCardView(
+                composable = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f)
+                            .let {
+                                if (useGradient) {
+                                    it.background(
+                                        Brush.verticalGradient(
+                                            listOf(firstColor, secondColor)
+                                        ),
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                } else {
+                                    it.background(
+                                        backgroundColor,
+                                        shape = RoundedCornerShape(8.dp)
+                                    )
+                                }
+                            }
+                    ) {
+
+                        backgroundImage?.let { image ->
+                            val isBlurSupported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                            DebugMode.e("Is blur supported $isBlurSupported")
+//                                backgroundImage = if (isBlurSupported) {
+//                                    applyBlurWithRenderEffect(
+//                                        image.asAndroidBitmap(),
+//                                        imageBlur
+//                                    ).asImageBitmap()
+//                                } else {
+//                                    applyBlurWithBlurMaskFilter(
+//                                        image.asAndroidBitmap(),
+//                                        imageBlur
+//                                    ).asImageBitmap()
+//                                }
+                            Image(
+                                bitmap = image,
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .blur(
+                                        radiusX = imageBlur.dp,
+                                        radiusY = imageBlur.dp,
+                                        edgeTreatment = BlurredEdgeTreatment.Unbounded
+                                    )
+//
+
+                                    .clip(RoundedCornerShape(8.dp)) // Apply clipping first
+                                    .alpha(alpha),
+                                contentScale = ContentScale.Crop
+                            )
+
+
+                        }
+                        Text(
+                            text = text,
+                            modifier = Modifier
+                                .align(Alignment.Center)
+                                .padding(
+                                    start = leftPadding.dp,
+                                    top = topPadding.dp,
+                                    end = rightPadding.dp,
+                                    bottom = bottomPadding.dp
+                                )
+                                .alpha(opacity)
+                                .let {
+                                    if (showBorder) {
+                                        it
+                                            .border(
+                                                width = 1.dp,
+                                                color = textColor.copy(alpha = 0.3f),
+                                                shape = RoundedCornerShape(4.dp)
+                                            )
+                                            .padding(8.dp)
+                                    } else {
+                                        it
+                                    }
+                                },
+                            style = TextStyle(
+                                fontSize = fontSize.sp,
+                                color = textColor,
+                                fontFamily = selectedFont,
+                                textAlign = currentAlignment,
+                                fontStyle = currentFontStyle,
+                                fontWeight = currentFontWeight,
+                                shadow = Shadow(
+                                    color = shadowColor,
+                                    offset = Offset(shadowOffsetX, shadowOffsetY),
+                                    blurRadius = shadowBlurRadius
+                                )
+                            )
+                        )
+
+                        Text(
+                            text = "©Joyful",
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(
+                                    bottom = 20.dp
+                                ),
+                            style = TextStyle(
+                                fontSize = 12.sp,
+                                color = textColor,
+                                fontFamily = selectedFont,
+                                textAlign = currentAlignment,
+                                fontStyle = currentFontStyle,
+                                fontWeight = FontWeight.Normal,
+                            )
+                        )
+
+                    }
+
+                },
+                share = shareMessage
+            ) {
+                shareMessage = it
+
+            }
+
+        }
+        if (changeBackgroundColor) {
+            ColorPickerDialog(currentColor = backgroundColor, onColorChange = { c ->
+                backgroundColor = Color(c)
+            }, onDismiss = {
+                changeBackgroundColor = false
+            }) {
+                changeBackgroundColor = false
+            }
+
+        }
+    }
 
 }
 
@@ -921,7 +1198,7 @@ fun saveImageWithText(bitmap: Bitmap, text: String, context: Context, onAction: 
         // Save the image using MediaStore API
         saveImageToMediaStore(context, bitmap, onAction)
     } else {
-        saveImageToExternalStorage(context, bitmap,onAction)
+        saveImageToExternalStorage(context, bitmap, onAction)
     }
 }
 
@@ -1210,7 +1487,7 @@ fun captureAndSaveBitmap(context: Context, bitmap: Bitmap): Uri? {
 fun SaveBitmapToStorage(myBitmap: Bitmap?, onAction: (String) -> Unit) {
     val context = LocalContext.current
     val view = LocalView.current
-    val bitmap = captureBitmapFromView(view)
+//    val bitmap = captureBitmapFromView(view)
 
 // Create a content resolver reference
 //    val contentResolver = context.contentResolver
@@ -1273,6 +1550,7 @@ fun SaveBitmapToStorage(myBitmap: Bitmap?, onAction: (String) -> Unit) {
 
 @Composable
 fun ShareCardView(
+    composable: @Composable () -> Unit,
     share: Boolean,
     update: (Boolean) -> Unit
 ) {
@@ -1287,35 +1565,44 @@ fun ShareCardView(
 
 
     if (sd) {
-        val bitmap = captureBitmapFromView(view)
+//        val bitmap = captureBitmapFromView(view)
+        LaunchedEffect(Unit) {
+            coroutineScope {
+                val bitmap = captureComposableAsImage(
+                    composable = composable,
+                    context = context
+                )
+                val file: Uri = saveBitmapToFile(context, bitmap)
+
+
+                val shareIntent = Intent().apply {
+                    action = Intent.ACTION_SEND
+                    type = "image/png"
+                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    putExtra(Intent.EXTRA_STREAM, file)
+                }
+
+                val shareChooser = Intent.createChooser(shareIntent, null)
+                val resInfoList: List<ResolveInfo> = context.packageManager
+                    .queryIntentActivities(shareChooser, PackageManager.MATCH_DEFAULT_ONLY)
+
+                for (resolveInfo in resInfoList) {
+                    val packageName: String = resolveInfo.activityInfo.packageName
+                    context.grantUriPermission(
+                        packageName,
+                        file,
+                        Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                    )
+                }
+                context.startActivity(shareChooser)
+                sd = false
+                update(sd)
+            }
+        }
         // Share the screenshot as an image
 
-        val file: Uri = saveBitmapToFile(context, bitmap)
 
-
-        val shareIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            type = "image/png"
-            addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            putExtra(Intent.EXTRA_STREAM, file)
-        }
-
-        val shareChooser = Intent.createChooser(shareIntent, null)
-        val resInfoList: List<ResolveInfo> = context.packageManager
-            .queryIntentActivities(shareChooser, PackageManager.MATCH_DEFAULT_ONLY)
-
-        for (resolveInfo in resInfoList) {
-            val packageName: String = resolveInfo.activityInfo.packageName
-            context.grantUriPermission(
-                packageName,
-                file,
-                Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_READ_URI_PERMISSION
-            )
-        }
-        context.startActivity(shareChooser)
-        sd = false
-        update(sd)
         /* val shareIntent = Intent().apply {
              action = Intent.ACTION_SEND
              type = "image/png"
@@ -1369,8 +1656,6 @@ fun saveBitmapToFile(context: Context, bitmap: Bitmap): Uri {
 val currentTimeMillis = System.currentTimeMillis()
 
 
-
-
 fun saveQuoteToDevice(
     context: Context, quote: String, backgroudColor: Color, imageUri: Uri?,
     blurRadius: Float = 15f,
@@ -1378,15 +1663,15 @@ fun saveQuoteToDevice(
     textColor: Color,
     textAlign: TextAlign,
     fontFamily: FontFamily,
-    shadowColor:Color,
-    offsetX:Float,
-    offsetY:Float,
-    shadowBlur:Float,
-    topPadding:Float,
-    bottomPadding:Float,
-    leftPadding:Float,
-    rightPadding:Float,
-    fontSize:Float,
+    shadowColor: Color,
+    offsetX: Float,
+    offsetY: Float,
+    shadowBlur: Float,
+    topPadding: Float,
+    bottomPadding: Float,
+    leftPadding: Float,
+    rightPadding: Float,
+    fontSize: Float,
     onAction: (Boolean) -> Unit
 ) {
     // Check if the device is running API 29 (Android 10) or higher, and if so, use MediaStore for saving images.
@@ -1417,12 +1702,12 @@ fun saveQuoteToDevice(
         isAntiAlias = true
         typeface = Typeface.MONOSPACE
 //        typeface = Typeface.create(fontFamily.getScopeName().toString(),Typeface.NORMAL)
-        setShadowLayer(shadowBlur,offsetX, offsetY,shadowColor.toArgb())
+        setShadowLayer(shadowBlur, offsetX, offsetY, shadowColor.toArgb())
 
     }
 
     val copyRight = TextPaint().apply {
-        color =  textColor.toArgb()
+        color = textColor.toArgb()
         textSize = 30f
         isAntiAlias = true
     }
@@ -1446,7 +1731,7 @@ fun saveQuoteToDevice(
     // Draw the background (red)
     canvas.drawColor(backgroudColor.toArgb())
 
-    Log.e("Test data", "$imageOpacity -> ${imageOpacity*255}")
+    Log.e("Test data", "$imageOpacity -> ${imageOpacity * 255}")
 
     // Draw the image from the URI (if available)
     imageUri?.let { uri ->
@@ -1459,7 +1744,7 @@ fun saveQuoteToDevice(
                 applyBlurWithBlurMaskFilter(it, blurRadius)
             }
             val paint = Paint().apply {
-                alpha = (imageOpacity*255).toInt() // Set opacity
+                alpha = (imageOpacity * 255).toInt() // Set opacity
             }
             // Draw the image, centered, scaled down to fit within the canvas
             val imageX = (canvas.width - it.width) / 2f
@@ -1471,11 +1756,14 @@ fun saveQuoteToDevice(
     // Draw the multiline quote centered on the canvas
     val yPosition = (bitmap.height / 2) - (staticLayout.height / 2) // Vertically center the text
     canvas.save()
-    canvas.translate(leftPadding,yPosition.toFloat()) // Apply horizontal margin and center vertically
+    canvas.translate(
+        leftPadding,
+        yPosition.toFloat()
+    ) // Apply horizontal margin and center vertically
     staticLayout.draw(canvas)
     canvas.restore()
 
-    val align = when(textAlign){
+    val align = when (textAlign) {
         TextAlign.Center -> Layout.Alignment.ALIGN_CENTER
         TextAlign.Right -> Layout.Alignment.ALIGN_OPPOSITE
         TextAlign.Left -> Layout.Alignment.ALIGN_NORMAL
@@ -1503,7 +1791,6 @@ fun saveQuoteToDevice(
 
 
 }
-
 
 
 // Function to load a Bitmap from a URI
@@ -1543,5 +1830,54 @@ fun applyBlurWithBlurMaskFilter(bitmap: Bitmap, radius: Float): Bitmap {
     canvas.drawBitmap(bitmap, 0f, 0f, paint)
     return blurredBitmap
 }
+
+fun Bitmap.applyBlur(context: Context, radius: Int): Bitmap {
+    if (radius <= 0) return this // No blur needed
+
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // ✅ Android 12+ (API 31+): Use RenderEffect
+//        val renderEffect = RenderEffect.createBlurEffect(
+//            radius.toFloat(), radius.toFloat(), Shader.TileMode.DECAL
+//        )
+
+        val blurredBitmap = Bitmap.createBitmap(width, height, config)
+        val canvas = Canvas(blurredBitmap)
+        val paint = Paint().apply {
+            setShader(BitmapShader(this@applyBlur, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP))
+            applyBlurWithRenderEffect(
+                blurredBitmap,
+                radius.toFloat()
+            ) // ✅ Corrected: Uses setRenderEffect()
+        }
+
+        canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), paint)
+        blurredBitmap
+
+    } else {
+        // ✅ Android 11 and below: Use ScriptIntrinsicBlur (RSBlur)
+        val inputBitmap = copy(config, true)
+        val outputBitmap = Bitmap.createBitmap(width, height, config)
+
+        val rs = RenderScript.create(context)
+        val input = Allocation.createFromBitmap(rs, inputBitmap)
+        val output = Allocation.createFromBitmap(rs, outputBitmap)
+
+        val blurScript = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs)).apply {
+            setRadius(radius.toFloat()) // Blur strength
+            setInput(input)
+            forEach(output)
+        }
+
+        output.copyTo(outputBitmap)
+        rs.destroy()
+        outputBitmap
+    }
+}
+
+
+
+
+
+
 
 

@@ -3,6 +3,8 @@ package com.joyful.app.pickuplines.ui.layouts.lists
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ResolveInfo
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -68,6 +70,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -104,15 +107,18 @@ import com.joyful.app.pickuplines.data.models.CategoryListModel
 import com.joyful.app.pickuplines.data.models.PickupLineModel
 import com.joyful.app.pickuplines.data.models.PickupModel
 import com.joyful.app.pickuplines.ui.dialogs.InfoAlertDialog
+import com.joyful.app.pickuplines.ui.dialogs.LoadingAlertDialog
 import com.joyful.app.pickuplines.ui.layouts.AdComposable
 import com.joyful.app.pickuplines.ui.layouts.LoadingContentColumn
 import com.joyful.app.pickuplines.ui.layouts.captureBitmapFromView
+import com.joyful.app.pickuplines.ui.layouts.captureComposableAsImage
 import com.joyful.app.pickuplines.ui.layouts.currentTimeMillis
 import com.joyful.app.pickuplines.ui.layouts.itemsWithAds
 import com.joyful.app.pickuplines.ui.layouts.itemsWithAds2
 import com.joyful.app.pickuplines.ui.layouts.loadInterstitial
 import com.joyful.app.pickuplines.ui.layouts.mInterstitialAd
 import com.joyful.app.pickuplines.ui.layouts.saveBitmapToFile
+import com.joyful.app.pickuplines.ui.layouts.saveComposableAsImage
 import com.joyful.app.pickuplines.ui.layouts.showInterstitial
 import com.joyful.app.pickuplines.ui.screenname.ScreenName
 import com.joyful.app.pickuplines.ui.theme.backGroundColor
@@ -125,6 +131,8 @@ import com.xdroid.app.service.utils.enums.Status
 import com.xdroid.app.service.utils.helper.DebugMode
 import com.xdroid.app.service.utils.helper.DynamicResponse
 import com.xdroid.app.service.utils.helper.NetworkHelper
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.io.File
@@ -158,7 +166,8 @@ fun ShowCategoriesItems(
             DebugMode.e("askdjhaksjdhjasdahsd ${isDataLoaded.value}")
             myViewModel.getPickupLines(name) // Set as loaded to prevent future calls
         }
-        myViewModel.getADList()
+        if (adBanner == null)
+            myViewModel.getADList()
     }
     LaunchedEffect(Unit) {
         if (networkHelper.isNetworkConnected()) {
@@ -370,16 +379,19 @@ fun PickupItem(
 }
 
 
-@RequiresApi(Build.VERSION_CODES.M)
 @Composable
-fun ShareDialog(onDismiss: () -> Unit, onShareText: String, context: Context) {
+fun ShareDialog(
+    onDismiss: () -> Unit, onShareText: String, context: Context,
+    composable: @Composable () -> Unit // Pass the composable to capture as an image
+) {
+    val coroutineScope = rememberCoroutineScope()
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Share Options") },
-
         confirmButton = {
             Button(onClick = {
-                shareText(onShareText, context) // Replace with actual text input
+                shareText(onShareText, context)
                 onDismiss()
             }) {
                 Text("Share as Text")
@@ -387,10 +399,15 @@ fun ShareDialog(onDismiss: () -> Unit, onShareText: String, context: Context) {
         },
         dismissButton = {
             Button(onClick = {
-                val bitmap = captureBitmapFromView(onShareText)
-                val file: Uri = saveBitmapToFile(context, bitmap)
-                shareImage(file, context)
-                onDismiss()
+                coroutineScope.launch {
+                    val bitmap = captureComposableAsImage(
+                        composable = composable,
+                        context = context
+                    )
+                    val file: Uri = saveBitmapToFile(context, bitmap)
+                    shareImage(file, context)
+                    onDismiss()
+                }
             }) {
                 Text("Share as Image")
             }
@@ -445,22 +462,33 @@ fun QuoteBox(
 
 
     var showDialog by remember { mutableStateOf(false) }
+    var adsLoading by remember { mutableStateOf(false) }
 
     if (buttonClicked) {
+        adsLoading = true
+//        navController.navigate(ScreenName.detailRoute(ScreenName.EditScreen, quote))
+//        buttonClicked = false
         LaunchedEffect(Unit) {
+
             if (networkHelper.isNetworkConnected()) {
                 showInterstitial(context) {
                     buttonClicked = false
                     navController.navigate(ScreenName.detailRoute(ScreenName.EditScreen, quote))
+                    adsLoading = false
                 }
             } else {
                 buttonClicked = false
                 navController.navigate(ScreenName.detailRoute(ScreenName.EditScreen, quote))
+                adsLoading = false
 
             }
         }
 
 
+    }
+
+    if (adsLoading){
+        LoadingAlertDialog()
     }
     Column {
         Spacer(modifier = Modifier.height(16.dp))
@@ -599,7 +627,60 @@ fun QuoteBox(
                     IconButton(onClick = {
                         // Implement your save logic here
                         // For example, save to a database or shared preferences
-                        saveQuoteAsImage(context, quote, onAction = {
+                        saveComposableAsImage(
+                            composable = {
+                                Box(
+                                    modifier = Modifier
+                                        .background(color = black)
+                                        .fillMaxWidth()
+                                ) {
+
+                                    Text(
+                                        text = quote,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            color = Color.White,
+                                            fontSize = 35.sp,
+                                            fontStyle = FontStyle.Italic,
+                                            fontWeight = FontWeight.Medium,
+                                            fontFamily = FontFamily(
+                                                Font(
+                                                    googleFont = GoogleFont("Space Mono"),
+                                                    fontProvider = provider
+                                                )
+                                            )
+                                        ),
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .padding(horizontal = 20.dp)
+                                            .fillMaxWidth()
+                                            .align(Alignment.Center)
+                                    )
+
+                                    Text(
+                                        text = "©Joyful",
+                                        modifier = Modifier
+                                            .align(Alignment.BottomCenter)
+                                            .padding(
+                                                bottom = 20.dp
+                                            ),
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 12.sp,
+                                            color = white,
+                                            fontFamily = FontFamily(
+                                                Font(
+                                                    googleFont = GoogleFont("Space Mono"),
+                                                    fontProvider = provider
+                                                )
+                                            ),
+                                            textAlign = TextAlign.Center,
+                                            fontStyle = FontStyle.Italic,
+                                            fontWeight = FontWeight.Normal,
+                                        )
+                                    )
+
+                                }
+                            },
+                            context, onAction = {
 
                         })
 
@@ -617,7 +698,64 @@ fun QuoteBox(
         Spacer(modifier = Modifier.height(16.dp))
         // Dialog
         if (showDialog) {
-            ShareDialog(onDismiss = { showDialog = false }, onShareText = quote, context)
+            ShareDialog(
+                onDismiss = { showDialog = false },
+                onShareText = quote,
+                context,
+                composable = {
+                    Box(
+                        modifier = Modifier
+                            .background(color = black)
+                            .fillMaxWidth()
+                    ) {
+
+                        Text(
+                            text = quote,
+                            style = androidx.compose.ui.text.TextStyle(
+                                color = Color.White,
+                                fontSize = 35.sp,
+                                fontStyle = FontStyle.Italic,
+                                fontWeight = FontWeight.Medium,
+                                fontFamily = FontFamily(
+                                    Font(
+                                        googleFont = GoogleFont("Space Mono"),
+                                        fontProvider = provider
+                                    )
+                                )
+                            ),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .padding(horizontal = 20.dp)
+                                .fillMaxWidth()
+
+                                .align(Alignment.Center)
+                        )
+                        Text(
+                            text = "©Joyful",
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(
+                                    bottom = 20.dp
+                                ),
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontSize = 12.sp,
+                                color = white,
+                                fontFamily = FontFamily(
+                                    Font(
+                                        googleFont = GoogleFont("Space Mono"),
+                                        fontProvider = provider
+                                    )
+                                ),
+                                textAlign = TextAlign.Center,
+                                fontStyle = FontStyle.Italic,
+                                fontWeight = FontWeight.Normal,
+                            )
+                        )
+
+
+                    }
+
+                })
         }
 
         if (readQuote) {

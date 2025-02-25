@@ -24,8 +24,8 @@ android {
         applicationId = "com.joyful.app.pickuplines"
         minSdk = 24
         targetSdk = 34
-        versionCode = 6
-        versionName = "1.0.4"
+        versionCode = 7
+        versionName = "1.0.7"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +30,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Typeface
 import androidx.compose.ui.text.googlefonts.Font
 import androidx.compose.ui.text.googlefonts.GoogleFont
@@ -46,8 +49,8 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
 
     // Define GoogleFont instances for different fonts
     val fonts = listOf(
-        GoogleFont("Roboto"),
         GoogleFont("Lobster Two"),
+        GoogleFont("Roboto"),
         GoogleFont("Lora"),
         GoogleFont("Open Sans"),
         GoogleFont("Pacifico"),
@@ -79,6 +82,40 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
         GoogleFont("Mulish"),
         GoogleFont("Arimo"),
         GoogleFont("Space Mono"),
+        GoogleFont("Alegreya"),
+        GoogleFont("Bebas Neue"),
+        GoogleFont("Bungee"),
+        GoogleFont("Cairo"),
+        GoogleFont("Caveat"),
+        GoogleFont("Chivo"),
+        GoogleFont("Comfortaa"),
+        GoogleFont("Concert One"),
+        GoogleFont("Dancing Script"),
+        GoogleFont("Domine"),
+        GoogleFont("Exo"),
+        GoogleFont("Fjalla One"),
+        GoogleFont("Fredoka One"),
+        GoogleFont("Heebo"),
+        GoogleFont("Hind"),
+        GoogleFont("Josefin Sans"),
+        GoogleFont("Kalam"),
+        GoogleFont("Kanit"),
+        GoogleFont("Karma"),
+        GoogleFont("Mali"),
+        GoogleFont("Manrope"),
+        GoogleFont("Maven Pro"),
+        GoogleFont("Merriweather Sans"),
+        GoogleFont("Notable"),
+        GoogleFont("Overpass"),
+        GoogleFont("Philosopher"),
+        GoogleFont("Rajdhani"),
+        GoogleFont("Secular One"),
+        GoogleFont("Sora"),
+        GoogleFont("Teko"),
+        GoogleFont("Varela Round"),
+        GoogleFont("Vollkorn"),
+        GoogleFont("Zilla Slab"),
+//        GoogleFont(""),
 
 
         )
@@ -89,7 +126,7 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
     }
 
     // Initial selected font family
-    val selectedFontFamily by remember { mutableStateOf(fontFamilies.first()) }
+    var selectedFontFamily by remember { mutableStateOf(fontFamilies.first()) }
     // Obtain Typeface from the selected FontFamily
 
 
@@ -108,18 +145,38 @@ fun FontSelectionScreen(onFontSelected: (FontFamily) -> Unit, onClicked: () -> U
         Spacer(modifier = Modifier.height(10.dp))
         // Horizontal list of fonts
         LazyRow(modifier = Modifier.fillMaxWidth()) {
-            items(fontFamilies) { fontFamily ->
+            itemsIndexed(fontFamilies) { index, fontFamily ->
                 // Render each font as a selectable item
+
+                val fontName = fonts[index]
+                val isSelected = fontFamily == selectedFontFamily
+//                Text(
+//                    text = fontFamily.getScopeName().value,
+//                    style = TextStyle(fontFamily = fontFamily, fontSize = 18.sp),
+//                    modifier = Modifier
+//                        .padding(horizontal = 8.dp)
+//                        .clickable {
+//                            onFontSelected(fontFamily)
+//
+//
+//                        } // Update selected font on click
+//                )
                 Text(
-                    text = "Sample Text",
-                    style = TextStyle(fontFamily = fontFamily, fontSize = 18.sp),
+                    text = fontName.name,
+                    style = TextStyle(
+                        fontFamily = fontFamily,
+                        fontSize = 18.sp,
+                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isSelected) Color.Blue else Color.Black
+                    ),
                     modifier = Modifier
                         .padding(horizontal = 8.dp)
+                        .background(if (isSelected) Color.LightGray else Color.Transparent, shape = RoundedCornerShape(4.dp))
+                        .padding(8.dp)
                         .clickable {
+                            selectedFontFamily = fontFamily
                             onFontSelected(fontFamily)
-
-
-                        } // Update selected font on click
+                        }
                 )
             }
         }

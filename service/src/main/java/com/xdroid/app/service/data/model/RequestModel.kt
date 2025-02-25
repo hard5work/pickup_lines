@@ -13,7 +13,7 @@ class DefaultRequestModel {
     var headers: HashMap<String, String> = HashMap()
     var loginBody: HashMap<String, String> = HashMap()
     var body: JsonObject = JsonObject()
-    var setToken: Boolean = true
+    var setToken: Boolean = false
     var fileBody = HashMap<String, RequestBody>()
     var fileBodyDocs = HashMap<String, List<HashMap<String, RequestBody>>>()
     var fileBodyDocs2 = HashMap<String, List<RequestBody>>()
